@@ -62,6 +62,10 @@ struct Flash_fwd_params : public Qkv_params {
     // The pointer to the P matrix.
     void * __restrict__ p_ptr;
 
+    // The pointer to the scores max and scores sum.
+    void * __restrict__ scores_max_ptr;
+    void * __restrict__ scores_sum_ptr;
+
     // The pointer to the softmax sum.
     void * __restrict__ softmax_lse_ptr;
 

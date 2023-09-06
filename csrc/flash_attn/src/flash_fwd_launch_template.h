@@ -15,6 +15,11 @@ __global__ void flash_fwd_kernel(Flash_fwd_params params) {
     flash::compute_attn<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params);
 }
 
+template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax>
+__global__ void flash_fwd_kernel_casual(Flash_fwd_params params) {
+    flash::compute_attn_casual<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params);
+}
+
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal>
 void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     constexpr size_t smem_size = Kernel_traits::kSmemSize;
@@ -34,8 +39,13 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     BOOL_SWITCH(is_even_N, IsEvenNConst, [&] {
         BOOL_SWITCH(is_even_K, IsEvenKConst, [&] {
             BOOL_SWITCH(return_softmax, ReturnSoftmaxConst, [&] {
+                // TODO: profiling and test accuracy
+                // how? profling is easy, but accuracy is not easy because our kernels are processing sequencially
+                // The only method to test accuracy is create a new API
+                // We can test accuarcy FIRST!                
+                
                 // Will only return softmax if dropout, to reduce compilation time.
-                auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
+                /* auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
                 // auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, true, ReturnSoftmaxConst && Is_dropout>;
                 if (smem_size >= 48 * 1024) {
                     C10_CUDA_CHECK(cudaFuncSetAttribute(
@@ -45,8 +55,21 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                     &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                 // printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
+                kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params); 
+                C10_CUDA_KERNEL_LAUNCH_CHECK();*/
+                
+                auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
+                if (smem_size >= 48 * 1024) {
+                    C10_CUDA_CHECK(cudaFuncSetAttribute(
+                        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
+                }
+                int ctas_per_sm;
+                cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                    &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
+                // printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
                 kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params);
-                C10_CUDA_KERNEL_LAUNCH_CHECK();
+                C10_CUDA_KERNEL_LAUNCH_CHECK();  
+                
             });
         });
     });
