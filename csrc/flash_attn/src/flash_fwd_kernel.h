@@ -104,7 +104,7 @@ inline __device__ void softmax_rescale_o(Tensor0 &scores, Tensor1 &scores_max, T
 //  Bae: merge two fragments of O, stores at acc_o_1. Also merge scores_sum and scores_max,
 //       scores_sum stores at scores_sum_1, scores_max stores at scores_max_1
 
-template</*bool Is_first,bool Check_inf=false, */ typename Tensor0, typename Tensor1, typename Tensor2>
+template</*bool Is_first, */bool Check_inf=false, typename Tensor0, typename Tensor1, typename Tensor2>
 inline __device__ void softmax_merge_o(/*Tensor0 &scores,*/ Tensor1 &scores_max_1, Tensor1 &scores_sum_1,
                                         Tensor1 &scores_max_2, Tensor1 &scores_sum_2,
                                          Tensor2 &acc_o_1, Tensor2 &acc_o_2/*, float softmax_scale_log2*/) {
@@ -1066,9 +1066,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     // Bae: scores_max, scores_sum should be stored at glb mem, they are familiar to Q,O, only difference is kheaddim=1
     const index_t row_offset_scores_max = (bidb * params.h + bidh) * params.seqlen_q + m_block * kBlockM;
     const index_t row_offset_scores_sum = (bidb * params.h + bidh) * params.seqlen_q + m_block * kBlockM;
-    gscores_max = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_max_ptr) +row_offset_scores_max),
+    Tensor gscores_max = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_max_ptr) +row_offset_scores_max),
                             Shape<Int<kBlockM>>{}, Stride<_1>{});
-    gscores_sum = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_sum_ptr) +row_offset_scores_sum),
+    Tensor gscores_sum = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_sum_ptr) +row_offset_scores_sum),
                             Shape<Int<kBlockM>>{}, Stride<_1>{});
     
     typename Kernel_traits::GmemTiledCopyO gmem_tiled_copy_O;
@@ -1127,7 +1127,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     if(m_block < ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2){
             
-        n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN)/2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN)
+        n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN)/2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN);
         n_block = n_block_max;
 
         //Bae: recompute pointers to ptr(N-m_block) blocks fragment
@@ -1345,13 +1345,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // PREDICATES
 
         // Construct identity layout 
-        cOf = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
+        Tensor cOf = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
 
         // Repeat the partitioning with identity layouts
-        tOcOf = gmem_thr_copy_O.partition_S(cOf);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
+        Tensor tOcOf = gmem_thr_copy_O.partition_S(cOf);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
 
         // Allocate predicate tensors for k
-        tOpOf = make_tensor<bool>(make_shape(size<2>(tOsOf)));
+        Tensor tOpOf = make_tensor<bool>(make_shape(size<2>(tOsOf)));
 
         // Set predicates for k bounds
         if (!Is_even_K) {
@@ -1360,8 +1360,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
         // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
-        flash::copy</*Is_even_MN=*/false, Is_even_K>(gmem_tiled_copy_O, tOgOf, tOrOf, tOcOf, tOpOf,
-                                                 binfo.actual_seqlen_q - reverse_m_block * kBlockM);
+        flash::copy</*Is_even_MN=*/false, Is_even_K, /*Clear_OOB_MN=*/false, /*Clear_OOB_K=*/false>(
+            gmem_tiled_copy_O, tOgOf, tOrOf, tOcOf, tOpOf, binfo.actual_seqlen_q - reverse_m_block * kBlockM);
  
         cute::copy(gmem_tiled_copy_O, tOrOf, tOsOf);
 
@@ -1400,7 +1400,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        softmax_merge_o(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
+        softmax_merge_o</*Check_inf=*/false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
         //Bae: Re-compute LSE
 
