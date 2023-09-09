@@ -104,10 +104,10 @@ inline __device__ void softmax_rescale_o(Tensor0 &scores, Tensor1 &scores_max, T
 //  Bae: merge two fragments of O, stores at acc_o_1. Also merge scores_sum and scores_max,
 //       scores_sum stores at scores_sum_1, scores_max stores at scores_max_1
 
-template</*bool Is_first, */bool Check_inf=false, typename Tensor0, typename Tensor1, typename Tensor2>
-inline __device__ void softmax_merge_o(/*Tensor0 &scores,*/ Tensor1 &scores_max_1, Tensor1 &scores_sum_1,
-                                        Tensor1 &scores_max_2, Tensor1 &scores_sum_2,
-                                         Tensor2 &acc_o_1, Tensor2 &acc_o_2/*, float softmax_scale_log2*/) {
+template<bool Check_inf=false, typename Tensor1, typename Tensor2>
+inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_sum_1,
+                                       Tensor1 &scores_max_2, Tensor1 &scores_sum_2,
+                                       Tensor2 &acc_o_1, Tensor2 &acc_o_2) {
     Tensor scores_max = make_fragment_like(scores_max_1);
     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
     Tensor acc_o_1_rowcol = make_tensor(acc_o_1.data(), flash::convert_layout_acc_rowcol(acc_o_1.layout()));
