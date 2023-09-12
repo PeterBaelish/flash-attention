@@ -1365,7 +1365,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
  
         cute::copy(gmem_tiled_copy_O, tOrOf, tOsOf);
 
-        Tensor rOf = make_fragment_like(rO);
+        Tensor rOf = make_fragment_like(acc_o);
 
         Tensor taccOrOf = smem_thr_copy_O.retile_D(rOf);        // ((Atom,AtomNum), MMA_M, MMA_N)
         Tensor taccOsOf = smem_thr_copy_O.partition_S(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
