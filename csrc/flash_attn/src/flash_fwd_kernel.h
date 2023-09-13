@@ -1116,6 +1116,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - m_block * kBlockM
     );
 
+    if (cute::thread0()) { print("fence 1"); }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1306,6 +1307,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     } 
 
+    if (cute::thread0()) { print("fence 2"); }
+
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     //Bae: we should sync for the whole token. In flash attention, one block is assigned to one SM. So the sync range is a few block in a few SMs.
@@ -1314,6 +1317,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     __threadfence();
+
+    if (cute::thread0()) { print("fence 3"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1359,6 +1364,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             for (int k = 0; k < size(tOpOf); ++k) { tOpOf(k) = get<1>(tOcOf(0, 0, k)) < params.d; }
         }
 
+        if (cute::thread0()) { print("fence 5"); }
+
         // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
         flash::copy</*Is_even_MN=*/false, Is_even_K, /*Clear_OOB_MN=*/false, /*Clear_OOB_K=*/false>(
             gmem_tiled_copy_O, tOgOf, tOrOf, tOcOf, tOpOf, binfo.actual_seqlen_q - reverse_m_block * kBlockM);
@@ -1372,6 +1379,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         // sO has the same size as sQ, so we don't need to sync here.
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
+
+        if (cute::thread0()) { print("fence 6"); }
 
         cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
 
@@ -1400,6 +1409,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
+        if (cute::thread0()) { print("fence 7"); }
+
         softmax_merge_o</*Check_inf=*/false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
         //Bae: Re-compute LSE
@@ -1414,6 +1425,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
         //Bae: load final result to glb_mem
+
+        if (cute::thread0()) { print("fence 8"); }
 
         // sO has the same size as sQ, so we don't need to sync here.
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
@@ -1438,6 +1451,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { gLSE(row) = lse(mi); }
             }
         }
+
+        if (cute::thread0()) { print("fence 9"); }
 
         // Construct identity layout for sO
         //Tensor cO = make_identity_tensor(make_shape(size<0>(sO), size<1>(sO)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
