@@ -628,6 +628,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
+    if (cute::thread0()) { print("fence -7"); }
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -736,6 +737,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     // TODO: this might need to change if we change the mma instruction in SM70
 
+    if (cute::thread0()) { print("fence -6"); }
+
     //Bae: B_r
     Tensor scores_max = make_tensor<ElementAccum>(Shape<Int<2 * size<1>(acc_o)>>{}); 
     Tensor scores_sum = make_fragment_like(scores_max);
@@ -779,6 +782,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         #pragma unroll
         for (int k = 0; k < size(tKVpKV); ++k) { tKVpKV(k) = get<1>(tKVcKV(0, 0, k)) < params.d; }
     }
+
+    if (cute::thread0()) { print("fence -5"); }
 
     // Prologue
 
@@ -838,6 +843,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
 
     clear(acc_o);
+
+    if (cute::thread0()) { print("fence -4"); }
 
     // For performance reason, we separate out two kinds of iterations:
     // those that need masking on S, and those that don't.
@@ -948,6 +955,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
     }
 
+    if (cute::thread0()) { print("fence -3"); }
+
     // These are the iterations where we don't need masking on S
     for (; n_block >= 0; --n_block) {
         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
@@ -1021,6 +1030,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         */
     }
 
+    if (cute::thread0()) { print("fence -2"); }
+
     // Epilogue
 
     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
@@ -1055,6 +1066,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     cute::copy(smem_tiled_copy_O, taccOrO, taccOsO);
 
+        if (cute::thread0()) { print("fence -1"); }
+
     const index_t row_offset_o = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
         + m_block * kBlockM * params.o_row_stride + bidh * params.o_head_stride;
     const index_t row_offset_lse = (bidb * params.h + bidh) * params.seqlen_q + m_block * kBlockM;
@@ -1077,6 +1090,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     Tensor tOgO = gmem_thr_copy_O.partition_D(gO);
 
     __syncthreads();
+
+    if (cute::thread0()) { print("fence 0"); }
 
     Tensor tOrO = make_tensor<Element>(shape(tOgO));
     cute::copy(gmem_tiled_copy_O, tOsO, tOrO);
