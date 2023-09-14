@@ -23,7 +23,8 @@ __global__ void flash_fwd_kernel_casual(Flash_fwd_params params) {
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal>
 void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     constexpr size_t smem_size = Kernel_traits::kSmemSize;
-    // printf("smem_size = %d\n", smem_size);
+    printf("c\n")
+    printf("smem_size = %d\n", smem_size);
 
     // Work-around for gcc 7. It doesn't like nested BOOL_SWITCH.
     // https://github.com/kokkos/kokkos-kernels/issues/349
@@ -57,7 +58,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 // printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
                 kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params); 
                 C10_CUDA_KERNEL_LAUNCH_CHECK();*/
-                
+
                 auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
                 if (smem_size >= 48 * 1024) {
                     C10_CUDA_CHECK(cudaFuncSetAttribute(

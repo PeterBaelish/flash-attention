@@ -194,6 +194,8 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
         const bool return_softmax,
         c10::optional<at::Generator> gen_) {
 
+    printf("a\n");
+
     auto dprops = at::cuda::getCurrentDeviceProperties();
     // bool is_sm75 = dprops->major == 7 && dprops->minor == 5;
     bool is_sm8x = dprops->major == 8 && dprops->minor >= 0;
@@ -312,6 +314,9 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
     }
 
     auto stream = at::cuda::getCurrentCUDAStream().stream();
+
+    printf("b\n");
+
     run_mha_fwd(params, stream);
 
     at::Tensor out_padded = out;

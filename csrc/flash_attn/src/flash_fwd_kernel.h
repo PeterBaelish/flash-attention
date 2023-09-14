@@ -628,7 +628,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
-    if (cute::thread0()) { print("fence -7"); }
+    if (cute::thread0()) { printf("fence -7"); }
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -737,7 +737,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     // TODO: this might need to change if we change the mma instruction in SM70
 
-    if (cute::thread0()) { print("fence -6"); }
+    if (cute::thread0()) { printf("fence -6"); }
 
     //Bae: B_r
     Tensor scores_max = make_tensor<ElementAccum>(Shape<Int<2 * size<1>(acc_o)>>{}); 
@@ -783,7 +783,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         for (int k = 0; k < size(tKVpKV); ++k) { tKVpKV(k) = get<1>(tKVcKV(0, 0, k)) < params.d; }
     }
 
-    if (cute::thread0()) { print("fence -5"); }
+    if (cute::thread0()) { printf("fence -5"); }
 
     // Prologue
 
@@ -844,7 +844,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     clear(acc_o);
 
-    if (cute::thread0()) { print("fence -4"); }
+    if (cute::thread0()) { printf("fence -4"); }
 
     // For performance reason, we separate out two kinds of iterations:
     // those that need masking on S, and those that don't.
@@ -955,7 +955,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
     }
 
-    if (cute::thread0()) { print("fence -3"); }
+    if (cute::thread0()) { printf("fence -3"); }
 
     // These are the iterations where we don't need masking on S
     for (; n_block >= 0; --n_block) {
@@ -1030,7 +1030,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         */
     }
 
-    if (cute::thread0()) { print("fence -2"); }
+    if (cute::thread0()) { printf("fence -2"); }
 
     // Epilogue
 
@@ -1066,7 +1066,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     cute::copy(smem_tiled_copy_O, taccOrO, taccOsO);
 
-        if (cute::thread0()) { print("fence -1"); }
+        if (cute::thread0()) { printf("fence -1"); }
 
     const index_t row_offset_o = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
         + m_block * kBlockM * params.o_row_stride + bidh * params.o_head_stride;
@@ -1091,7 +1091,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     __syncthreads();
 
-    if (cute::thread0()) { print("fence 0"); }
+    if (cute::thread0()) { printf("fence 0"); }
 
     Tensor tOrO = make_tensor<Element>(shape(tOgO));
     cute::copy(gmem_tiled_copy_O, tOsO, tOrO);
@@ -1131,7 +1131,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - m_block * kBlockM
     );
 
-    if (cute::thread0()) { print("fence 1"); }
+    if (cute::thread0()) { printf("fence 1"); }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1322,7 +1322,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     } 
 
-    if (cute::thread0()) { print("fence 2"); }
+    if (cute::thread0()) { printf("fence 2"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1333,7 +1333,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     __threadfence();
 
-    if (cute::thread0()) { print("fence 3"); }
+    if (cute::thread0()) { printf("fence 3"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1379,7 +1379,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             for (int k = 0; k < size(tOpOf); ++k) { tOpOf(k) = get<1>(tOcOf(0, 0, k)) < params.d; }
         }
 
-        if (cute::thread0()) { print("fence 5"); }
+        if (cute::thread0()) { printf("fence 5"); }
 
         // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
         flash::copy</*Is_even_MN=*/false, Is_even_K, /*Clear_OOB_MN=*/false, /*Clear_OOB_K=*/false>(
@@ -1395,7 +1395,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // sO has the same size as sQ, so we don't need to sync here.
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
 
-        if (cute::thread0()) { print("fence 6"); }
+        if (cute::thread0()) { printf("fence 6"); }
 
         cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
 
@@ -1424,7 +1424,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        if (cute::thread0()) { print("fence 7"); }
+        if (cute::thread0()) { printf("fence 7"); }
 
         softmax_merge_o</*Check_inf=*/false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
@@ -1441,7 +1441,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: load final result to glb_mem
 
-        if (cute::thread0()) { print("fence 8"); }
+        if (cute::thread0()) { printf("fence 8"); }
 
         // sO has the same size as sQ, so we don't need to sync here.
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
@@ -1467,7 +1467,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             }
         }
 
-        if (cute::thread0()) { print("fence 9"); }
+        if (cute::thread0()) { printf("fence 9"); }
 
         // Construct identity layout for sO
         //Tensor cO = make_identity_tensor(make_shape(size<0>(sO), size<1>(sO)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
