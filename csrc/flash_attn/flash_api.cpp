@@ -176,7 +176,7 @@ void set_params_dgrad(Flash_bwd_params &params,
 }
 
 void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream) {
-    printf("c\n");
+    //printf("c\n");
     FP16_SWITCH(!params.is_bf16, [&] {
         FWD_HEADDIM_SWITCH(params.d, [&] {
             run_mha_fwd_<elem_type, kHeadDim>(params, stream);

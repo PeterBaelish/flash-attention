@@ -40,7 +40,7 @@ def _get_block_size(device, head_dim, is_dropout, is_causal):
 
 
 def _flash_attn_forward(q, k, v, dropout_p, softmax_scale, causal, return_softmax):
-    print("666\n")
+    print("666")
     maybe_contiguous = lambda x: x.contiguous() if x.stride(-1) != 1 else x
     q, k, v = [maybe_contiguous(x) for x in (q, k, v)]
     out, q, k, v, out_padded, softmax_lse, S_dmask, rng_state = flash_attn_cuda.fwd(
