@@ -628,6 +628,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
+    printf("zz\n");
     if (cute::thread0()) { printf("fence -7"); }
 
     using Element = typename Kernel_traits::Element;
