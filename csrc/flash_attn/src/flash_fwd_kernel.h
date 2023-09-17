@@ -819,7 +819,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if(m_block >= ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2){ 
         n_block = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2; 
     }  
-
+    /*
     // We don't need to clear the sK smem tiles since we'll mask out the scores anyway.
     flash::copy<Is_even_N, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV,
                                       binfo.actual_seqlen_k - n_block * kBlockN);
@@ -869,16 +869,16 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // Advance gV
         if (masking_step > 0) {
             tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
-            flash::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
         } else {
             // Clear the smem tiles to account for predicated off loads
-            flash::copy<Is_even_N, Is_even_K, /*Clear_OOB_MN=*/true>(
+            flash::copy<Is_even_N, Is_even_K, true>(
                 gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV, binfo.actual_seqlen_k - n_block * kBlockN
             );
         }
         cute::cp_async_fence();
 
-        flash::gemm</*A_in_regs=*/Kernel_traits::Is_Q_in_regs>(
+        flash::gemm<Kernel_traits::Is_Q_in_regs>(
             acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
             smem_thr_copy_Q, smem_thr_copy_K
         );
@@ -914,7 +914,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (n_block > 0) {
             // Advance gK
             tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
-            flash::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
+            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
             // isn't right and we get race conditions.
             cute::cp_async_fence();
@@ -922,8 +922,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         // TODO: when we have key_padding_mask we'll need to Check_inf
         masking_step == 0
-            ? softmax_rescale_o</*Is_first=*/true,  /*Check_inf=*/Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
-            : softmax_rescale_o</*Is_first=*/false, /*Check_inf=*/Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+            ? softmax_rescale_o</true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
+            : softmax_rescale_o<false, Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
         // Convert scores from fp32 to fp16/bf16
         Tensor rP = flash::convert_type<Element>(scores);
@@ -935,7 +935,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (Return_softmax) {
             Tensor tOrP_copy = make_fragment_like(tOrP);
             cute::copy(tOrP, tOrP_copy);
-            flash::apply_dropout</*encode_dropout_in_sign_bit=*/true>(
+            flash::apply_dropout<true>(
                 tOrP_copy, params.p_dropout_in_uint8_t, seed, offset,
                 block_row_idx, block_col_idx, kNWarps
             );
@@ -968,30 +968,21 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         __syncthreads();
         // Advance gV
         tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
-        flash::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+        flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
         cute::cp_async_fence();
 
-        flash::gemm</*A_in_regs=*/Kernel_traits::Is_Q_in_regs>(
+        flash::gemm<Kernel_traits::Is_Q_in_regs>(
             acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
             smem_thr_copy_Q, smem_thr_copy_K
         );
 
-        /*
-        if (!Is_causal) {
-            if (!Is_even_N) { flash::apply_mask(scores, binfo.actual_seqlen_k - n_block * kBlockN); }
-        } else {
-            flash::apply_mask_causal(scores, n_block * kBlockN, binfo.actual_seqlen_k,
-                                     m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4,
-                                     kNWarps * 16);
-        }
-        */
 
         flash::cp_async_wait<0>();
         __syncthreads();
         if (n_block > 0) {
             // Advance gK
             tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
-            flash::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
+            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
             // isn't right and we get race conditions.
             cute::cp_async_fence();
@@ -999,7 +990,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
         Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
-        softmax_rescale_o</*Is_first=*/false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+        softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
         Tensor rP = flash::convert_type<Element>(scores);
         // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
@@ -1010,7 +1001,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (Return_softmax) {
             Tensor tOrP_copy = make_fragment_like(tOrP);
             cute::copy(tOrP, tOrP_copy);
-            flash::apply_dropout</*encode_dropout_in_sign_bit=*/true>(
+            flash::apply_dropout<true>(
                 tOrP_copy, params.p_dropout_in_uint8_t, seed, offset,
                 block_row_idx, block_col_idx, kNWarps
             );
@@ -1023,14 +1014,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
-
-        /*
-        // This check is at the end of the loop since we always have at least 1 iteration
-        if (n_masking_steps > 1 && n_block <= 0) {
-            --n_block;
-            break;
-        }
-        */
     }
 
     if (cute::thread0()) { printf("fence -2\n"); }
@@ -1130,13 +1113,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         for (int k = 0; k < size(tOpO); ++k) { tOpO(k) = get<1>(tOcO(0, 0, k)) < params.d; }
     }
     // Clear_OOB_K must be false since we don't want to write zeros to gmem
-    flash::copy</*Is_even_MN=*/false, Is_even_K, /*Clear_OOB_MN=*/false, /*Clear_OOB_K=*/false>(
+    flash::copy<false, Is_even_K, false, false>(
         gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - m_block * kBlockM
     );
 
     if (cute::thread0()) { printf("fence 1\n"); }
 
-    /*
+    
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
