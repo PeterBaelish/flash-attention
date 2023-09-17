@@ -685,7 +685,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     Tensor gP = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.p_ptr) + row_offset_p),
                             Shape<Int<kBlockM>, Int<kBlockN>>{},
                             make_stride(params.seqlen_k_rounded, _1{}));
-
+    /*
     Tensor sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
                             typename Kernel_traits::SmemLayoutQ{});
     // Careful we're using the same smem for sQ and sK | sV if Share_Q_K_smem;
@@ -718,7 +718,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //Bae: acc_o size is (4, B_r/2, Headdim/2)
     Tensor acc_o = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kHeadDim>>{});  // MMA, MMA_M, MMA_K
-    /*
+    
     //
     // Copy Atom retiling
     //
