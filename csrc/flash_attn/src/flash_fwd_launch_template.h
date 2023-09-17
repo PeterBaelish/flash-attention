@@ -25,7 +25,7 @@ template<typename Kernel_traits, bool Is_dropout, bool Is_causal>
 void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     constexpr size_t smem_size = Kernel_traits::kSmemSize;
     
-    printf("smem_size = %d\n", smem_size);
+    printf("fuck you smem_size = %d\n", smem_size);
     printf("y\n");
 
     // Work-around for gcc 7. It doesn't like nested BOOL_SWITCH.
