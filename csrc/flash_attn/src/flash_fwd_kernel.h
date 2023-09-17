@@ -718,7 +718,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //Bae: acc_o size is (4, B_r/2, Headdim/2)
     Tensor acc_o = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kHeadDim>>{});  // MMA, MMA_M, MMA_K
-
+    /*
     //
     // Copy Atom retiling
     //
@@ -792,7 +792,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     Tensor tQrQ = make_fragment_like(tQgQ);
     // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
-    flash::copy</*Is_even_MN=*/false, Is_even_K>(gmem_tiled_copy_QKV, tQgQ, tQsQ, tQcQ, tQpQ,
+    flash::copy<false, Is_even_K>(gmem_tiled_copy_QKV, tQgQ, tQsQ, tQcQ, tQpQ,
                                                  binfo.actual_seqlen_q - m_block * kBlockM);
     if (Kernel_traits::Is_Q_in_regs) { cute::cp_async_fence(); }
 
@@ -819,7 +819,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if(m_block >= ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2){ 
         n_block = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2; 
     }  
-    /*
+    
     // We don't need to clear the sK smem tiles since we'll mask out the scores anyway.
     flash::copy<Is_even_N, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV,
                                       binfo.actual_seqlen_k - n_block * kBlockN);
