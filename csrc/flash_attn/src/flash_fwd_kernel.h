@@ -628,6 +628,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
+   
+    /*
     printf("zz\n");
     if (cute::thread0()) { printf("fence -7\n"); }
 
@@ -649,9 +651,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     constexpr int kNWarps = Kernel_traits::kNWarps;
     constexpr int MMA_M = kBlockM / decltype(size<0>(typename Kernel_traits::TiledMma::TiledShape_MNK{}))::value;
 
-    const BlockInfo</*Varlen=*/!Is_even_N> binfo(params, bidb);
+    const BlockInfo<!Is_even_N> binfo(params, bidb);
     if (m_block * kBlockM >= binfo.actual_seqlen_q || binfo.actual_seqlen_k == 0) return;
-    /*
+    
     int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
     
     n_block_max = std::min(n_block_max, cute::ceil_div((m_block + 1) * kBlockM, kBlockN)); //causal
