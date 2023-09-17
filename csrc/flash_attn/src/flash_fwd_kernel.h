@@ -651,7 +651,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     const BlockInfo</*Varlen=*/!Is_even_N> binfo(params, bidb);
     if (m_block * kBlockM >= binfo.actual_seqlen_q || binfo.actual_seqlen_k == 0) return;
-
+    /*
     int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
     
     n_block_max = std::min(n_block_max, cute::ceil_div((m_block + 1) * kBlockM, kBlockN)); //causal
@@ -685,7 +685,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     Tensor gP = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.p_ptr) + row_offset_p),
                             Shape<Int<kBlockM>, Int<kBlockN>>{},
                             make_stride(params.seqlen_k_rounded, _1{}));
-    /*
+    
     Tensor sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
                             typename Kernel_traits::SmemLayoutQ{});
     // Careful we're using the same smem for sQ and sK | sV if Share_Q_K_smem;
