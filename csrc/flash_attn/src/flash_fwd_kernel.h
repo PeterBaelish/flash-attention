@@ -922,7 +922,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         // TODO: when we have key_padding_mask we'll need to Check_inf
         masking_step == 0
-            ? softmax_rescale_o</true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
+            ? softmax_rescale_o<true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
             : softmax_rescale_o<false, Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
         // Convert scores from fp32 to fp16/bf16
