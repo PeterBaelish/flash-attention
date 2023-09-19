@@ -628,7 +628,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
- 
+ /*
     if (cute::thread0()) { printf("fence -7\n"); }
 
     using Element = typename Kernel_traits::Element;
@@ -1015,7 +1015,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
     }
-/*
+
     if (cute::thread0()) { printf("fence -2\n"); }
 
     // Epilogue
