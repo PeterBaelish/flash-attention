@@ -1119,7 +1119,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     if (cute::thread0()) { printf("fence 1\n"); }
 
-    
+    /*
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1471,6 +1471,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
     }
+    */
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
