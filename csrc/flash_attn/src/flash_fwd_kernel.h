@@ -1015,7 +1015,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
     }
-    /*
+    
     if (cute::thread0()) { printf("fence -2\n"); }
 
     // Epilogue
@@ -1081,7 +1081,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     Tensor tOrO = make_tensor<Element>(shape(tOgO));
     cute::copy(gmem_tiled_copy_O, tOsO, tOrO);
-
+    /*
     Tensor caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
     Tensor taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
     static_assert(decltype(size<0>(taccOcO))::value == 4);
