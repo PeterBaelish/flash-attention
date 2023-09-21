@@ -1102,7 +1102,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             }
         }
     }
-    /*
+    
     // Construct identity layout for sO
     Tensor cO = make_identity_tensor(make_shape(size<0>(sO), size<1>(sO)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
     // Repeat the partitioning with identity layouts
@@ -1471,7 +1471,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
     }
-    */
+    /**/
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

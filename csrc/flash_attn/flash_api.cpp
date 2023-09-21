@@ -33,6 +33,8 @@ void set_params_fprop(Flash_fwd_params &params,
                       void *cu_seqlens_q_d,
                       void *cu_seqlens_k_d,
                       void *p_d,
+                      void *scores_max_d,
+                      void *scores_sum_d,
                       void *softmax_lse_d,
                       float p_dropout,
                       float softmax_scale,
@@ -70,6 +72,10 @@ void set_params_fprop(Flash_fwd_params &params,
 
     // P = softmax(QK^T)
     params.p_ptr = p_d;
+
+    // Scores max and scores sum
+    params.scores_max_ptr = scores_max_d;
+    params.scores_sum_ptr = scores_sum_d;
 
     // Softmax sum
     params.softmax_lse_ptr = softmax_lse_d;
@@ -129,6 +135,8 @@ void set_params_dgrad(Flash_bwd_params &params,
                       void *dq_accum_d,
                       void *dk_accum_d,
                       void *dv_accum_d,
+                      //void *scores_max_d,
+                      //void *scores_sum_d,
                       void *softmax_lse_d,
                       void *dsoftmax_sum_d,
                       float p_dropout,
@@ -141,6 +149,8 @@ void set_params_dgrad(Flash_bwd_params &params,
                      cu_seqlens_q_d,
                      cu_seqlens_k_d,
                      nullptr,
+                     nullptr,//scores_max_d,
+                     nullptr,//scores_sum_d,
                      softmax_lse_d,
                      p_dropout,
                      softmax_scale,
@@ -273,6 +283,8 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
 
     auto opts = q.options();
 
+    auto scores_max = torch::empty({batch_size, num_heads, seqlen_q}, opts.dtype(at::kFloat));
+    auto scores_sum = torch::empty({batch_size, num_heads, seqlen_q}, opts.dtype(at::kFloat));
     auto softmax_lse = torch::empty({batch_size, num_heads, seqlen_q}, opts.dtype(at::kFloat));
     at::Tensor p;
     // Only return softmax if there's dropout to reduce compilation time
@@ -292,6 +304,8 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
                      /*cu_seqlens_q_d=*/nullptr,
                      /*cu_seqlens_k_d=*/nullptr,
                      return_softmax ? p.data_ptr() : nullptr,
+                     scores_max.data_ptr(),
+                     scores_sum.data_ptr(),
                      softmax_lse.data_ptr(),
                      p_dropout,
                      softmax_scale,
@@ -429,6 +443,8 @@ mha_varlen_fwd(const at::Tensor &q,  // total_q x num_heads x head_size, total_q
 
     auto opts = q.options();
 
+    auto scores_max = torch::empty({batch_size, num_heads, seqlen_q}, opts.dtype(at::kFloat));
+    auto scores_sum = torch::empty({batch_size, num_heads, seqlen_q}, opts.dtype(at::kFloat));
     auto softmax_lse = torch::empty({batch_size, num_heads, max_seqlen_q}, opts.dtype(at::kFloat));
     at::Tensor p;
     // Only return softmax if there's dropout to reduce compilation time
@@ -454,6 +470,8 @@ mha_varlen_fwd(const at::Tensor &q,  // total_q x num_heads x head_size, total_q
                      cu_seqlens_q.data_ptr(),
                      cu_seqlens_k.data_ptr(),
                      return_softmax ? p.data_ptr() : nullptr,
+                     scores_max.data_ptr(),
+                     scores_sum.data_ptr(),
                      softmax_lse.data_ptr(),
                      p_dropout,
                      softmax_scale,
