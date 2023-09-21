@@ -1470,6 +1470,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         flash::copy<false, Is_even_K, false, false>(
             gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
+        if (cute::thread0()) { printf("fence 10\n"); }
     }
     /**/
 }

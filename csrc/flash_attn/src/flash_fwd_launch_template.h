@@ -77,7 +77,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 printf("yy\n");
                 kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params);
                 C10_CUDA_KERNEL_LAUNCH_CHECK();  
-                
+                printf("yyy\n");
             });
         });
     });
