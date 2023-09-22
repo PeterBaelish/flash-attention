@@ -816,7 +816,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     int n_block = n_block_max - 1;
 
     //Bae: If m_block > floor(N/2), we only compute ceil(d/2) blocks
-    if(m_block >= ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2){ 
+    if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1){ 
         n_block = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2; 
     }  
     
@@ -1052,7 +1052,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     cute::copy(smem_tiled_copy_O, taccOrO, taccOsO);
 
-        if (cute::thread0()) { printf("fence -1\n"); }
+    if (cute::thread0()) { printf("fence -1\n"); }
 
     const index_t row_offset_o = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
         + m_block * kBlockM * params.o_row_stride + bidh * params.o_head_stride;
@@ -1069,7 +1069,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                             Shape<Int<kBlockM>>{}, Stride<_1>{});
     Tensor gscores_sum = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_sum_ptr) +row_offset_scores_sum),
                             Shape<Int<kBlockM>>{}, Stride<_1>{});
-    
+    if (cute::thread0()) { printf("fence -0.5\n"); }
     typename Kernel_traits::GmemTiledCopyO gmem_tiled_copy_O;
     auto gmem_thr_copy_O = gmem_tiled_copy_O.get_thread_slice(tidx);
     Tensor tOsO = gmem_thr_copy_O.partition_S(sO);        // ((Atom,AtomNum),ATOM_M,ATOM_N)
@@ -1095,7 +1095,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             if (row < binfo.actual_seqlen_q - m_block * kBlockM) { 
                 gLSE(row) = lse(mi); 
                 // Bae: store gscore_max and gscore_sum when m_block > N/2
-                if(!(m_block < ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2)){
+                if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1){
                     gscores_max(row) = scores_max(mi); 
                     gscores_sum(row) = scores_sum(mi); 
                 }
@@ -1129,7 +1129,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     int reverse_m_block = ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - m_block;
 
-    if(m_block < ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2){
+    if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2){
             
         n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN)/2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN);
         n_block = n_block_max;
@@ -1328,7 +1328,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //Bae: Then we should merge two fragments when m_block < N/2, fragment 1 to d/2-f(m_block) stored at shared memory, 
     //     d/2-f(m_block) to d-f(m_block) stored at global memory. Fragment in glb memmory will be load to shared memmory, 
     //     after merging the result will be load to global memory (the same place as where stored fragment). 
-    if(m_block < ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) {
+    if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2) {
            
         //Bae: fragment 1 to d/2-f(m_block) stored at sO, d/2-f(m_block) to d-f(m_block) stored at global mem somewhere, we need to recompute pointers
         const index_t row_offset_o_frag = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
