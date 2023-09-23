@@ -814,10 +814,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
 
     int n_block = n_block_max - 1;
+    int dst = 0;
 
     //Bae: If m_block > floor(N/2), we only compute ceil(d/2) blocks
     if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1){ 
-        n_block = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2; 
+        dst = n_block - cute::ceil_div(binfo.actual_seqlen_k, kBlockN) / 2; 
     }  
     
     // We don't need to clear the sK smem tiles since we'll mask out the scores anyway.
@@ -911,7 +912,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         flash::cp_async_wait<0>();
         __syncthreads();
-        if (n_block > 0) {
+        if (n_block > dst) {
             // Advance gK
             tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
@@ -952,7 +953,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // if (cute::thread0()) { print(scores); }
 
         // This check is at the end of the loop since we always have at least 1 iteration
-        if (n_masking_steps > 1 && n_block <= 0) {
+        if (n_masking_steps > 1 && n_block <= dst) {
             --n_block;
             break;
         }
@@ -961,7 +962,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (cute::thread0()) { printf("fence -3\n"); }
 
     // These are the iterations where we don't need masking on S
-    for (; n_block >= 0; --n_block) {
+    for (; n_block >= dst; --n_block) {
         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
         clear(acc_s);
         flash::cp_async_wait<0>();
@@ -979,7 +980,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         flash::cp_async_wait<0>();
         __syncthreads();
-        if (n_block > 0) {
+        if (n_block > dst) {
             // Advance gK
             tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
