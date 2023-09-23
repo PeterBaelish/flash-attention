@@ -1127,7 +1127,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     This part of result should be store at reg
     //     We should also keep the scores_max and scores_sum in reg
 
-    int reverse_m_block = ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - m_block;
+    int reverse_m_block = ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - m_block - 1;
 
     if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2){
             
