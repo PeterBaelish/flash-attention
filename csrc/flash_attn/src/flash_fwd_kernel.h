@@ -1157,7 +1157,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         gP = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.p_ptr) + row_offset_p_frag),
                                 Shape<Int<kBlockM>, Int<kBlockN>>{},
                                 make_stride(params.seqlen_k_rounded, _1{}));
-
+        if (cute::thread0()) { printf("fence 1.5\n"); }
         //sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
         //                        typename Kernel_traits::SmemLayoutQ{});
         // Careful we're using the same smem for sQ and sK | sV if Share_Q_K_smem;
@@ -1233,6 +1233,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //    params.rng_state[1] = std::get<1>(seeds);
         //}
 
+        if (cute::thread0()) { printf("fence 1.75\n"); }
+
         clear(acc_o);
         clear(scores_max);
         clear(scores_sum);
@@ -1291,6 +1293,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
 
         }
+
+        if (cute::thread0()) { printf("fence 1.875\n"); }
+
         // Epilogue
 
         // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
