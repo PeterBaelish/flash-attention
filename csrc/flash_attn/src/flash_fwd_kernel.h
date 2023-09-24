@@ -1281,8 +1281,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             ? softmax_rescale_o<true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
             : softmax_rescale_o<false, Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
-            softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
-
             Tensor rP = flash::convert_type<Element>(scores);
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
             // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
