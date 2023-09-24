@@ -1276,6 +1276,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             if (cute::thread0()) { printf("fence 1.82\n"); }
             // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
+
+            n_block == n_block_max - 1
+            ? softmax_rescale_o<true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
+            : softmax_rescale_o<false, Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+
             softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
             Tensor rP = flash::convert_type<Element>(scores);
