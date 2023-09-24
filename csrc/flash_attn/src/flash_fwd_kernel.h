@@ -1132,8 +1132,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2){
             
-        n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN)/2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN);
-        n_block = n_block_max;
+        n_block_max = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN);
+        n_block = n_block_max - 1;
 
         //Bae: recompute pointers to ptr(N-m_block) blocks fragment
         const index_t row_offset_q_frag = binfo.q_offset(params.q_batch_stride, params.q_row_stride, bidb)
@@ -1240,12 +1240,15 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         clear(scores_max);
         clear(scores_sum);
         
+        if (cute::thread0()) { printf("fence 1.8\n"); }
+
         for (; n_block >= 0; --n_block) {
             Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
             clear(acc_s);
             flash::cp_async_wait<0>();
             __syncthreads();
             // Advance gV
+            if (cute::thread0()) { printf("fence 1.81\n"); }
             tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
             cute::cp_async_fence();
@@ -1265,7 +1268,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 // isn't right and we get race conditions.
                 cute::cp_async_fence();
             }
-
+            if (cute::thread0()) { printf("fence 1.82\n"); }
             // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
             softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
@@ -1274,7 +1277,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
             // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
             Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_rowcol_Aregs<Kernel_traits::TiledMma>(rP.layout()));
-            uint32_t block_row_idx = m_block * (kBlockM / 16) + tidx / 32;
+            uint32_t block_row_idx = reverse_m_block * (kBlockM / 16) + tidx / 32;
             uint32_t block_col_idx = n_block * (kBlockN / 32);
             if (Return_softmax) {
                 Tensor tOrP_copy = make_fragment_like(tOrP);
