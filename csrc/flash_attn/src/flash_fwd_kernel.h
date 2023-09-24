@@ -1134,7 +1134,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             
         n_block_max = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN);
         n_block = n_block_max - 1;
-
+        if (cute::thread0()) { printf("n_block_max=%d\n", n_block_max); 
+        printf("binfo.actual_seqlen_k=%d\n", binfo.actual_seqlen_k); 
+        printf("kBlockN=%d\n", kBlockN); 
+        printf("m_block=%d\n", m_block);
+        printf("kBlockM=%d\n", kBlockM); 
+        }
         //Bae: recompute pointers to ptr(N-m_block) blocks fragment
         const index_t row_offset_q_frag = binfo.q_offset(params.q_batch_stride, params.q_row_stride, bidb)
             + reverse_m_block * kBlockM * params.q_row_stride + bidh * params.q_head_stride;
@@ -1277,6 +1282,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
             // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
             Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_rowcol_Aregs<Kernel_traits::TiledMma>(rP.layout()));
+            if (cute::thread0()) { printf("fence 1.83\n"); }
             uint32_t block_row_idx = reverse_m_block * (kBlockM / 16) + tidx / 32;
             uint32_t block_col_idx = n_block * (kBlockN / 32);
             if (Return_softmax) {
@@ -1293,9 +1299,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
                                     block_row_idx, block_col_idx, kNWarps);
             }
-
+            if (cute::thread0()) { printf("fence 1.84\n"); }
             flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
-
+            if (cute::thread0()) { printf("fence 1.85\n"); }
         }
 
         if (cute::thread0()) { printf("fence 1.875\n"); }
