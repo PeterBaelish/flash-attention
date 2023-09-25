@@ -117,7 +117,7 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
         // k = l(2)/l(1) * e^(m(2)-m(1))
         scores_max(mi) = scores_max_2(mi) > scores_max_1(mi) ? scores_max_2(mi) : scores_max_1(mi);
         float scores_scale = (scores_sum_2(mi) / scores_sum_1(mi))
-                             * exp2f((scores_max_2(mi) - scores_max_1(mi)) * ((float)(M_LOG2E)));
+                             * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E);
         scores_scale = 1.0 / (1.0 + scores_scale);
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
@@ -127,8 +127,8 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
     //We also need to compute and store l,m for LSE
     #pragma unroll
     for (int mi = 0; mi < size(scores_sum_1); ++mi) {
-        scores_sum_1(mi) = scores_sum_1(mi) * exp2f((scores_max_1(mi) - scores_max(mi)) * ((float)(M_LOG2E))) 
-                            + scores_sum_2(mi) * exp2f((scores_max_2(mi) - scores_max(mi)) * ((float)(M_LOG2E))); 
+        scores_sum_1(mi) = scores_sum_1(mi) * exp2f((scores_max_1(mi) - scores_max(mi)) * M_LOG2E) 
+                            + scores_sum_2(mi) * exp2f((scores_max_2(mi) - scores_max(mi)) * M_LOG2E); 
         scores_max_1(mi) = scores_max(mi);
     }
 };
@@ -1278,8 +1278,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
 
             n_block == n_block_max - 1
-            ? softmax_rescale_o<true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
-            : softmax_rescale_o<false, Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+            ? softmax_rescale_o<true>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
+            : softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
             Tensor rP = flash::convert_type<Element>(scores);
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
@@ -1420,7 +1420,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(mi));
+                const int row = get<0>(taccOcO_row(size(lse) - mi));
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
                     fragment_scores_max(mi) = gscores_max(row); 
                     fragment_scores_sum(mi) = gscores_sum(row); 
@@ -1430,9 +1430,29 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        if (cute::thread0()) { printf("fence 7\n"); }
+        if (cute::thread0()) 
+        { 
+            printf("fence 7\n");
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("fragment_scores_max:\n");
+            print(fragment_scores_max);
+            printf("fragment_scores_sum:\n");
+            print(fragment_scores_sum);
+        }
 
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
+
+        if (cute::thread0()) 
+        { 
+            printf("fence 7.5 merge result\n");
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+        }
 
         //Bae: Re-compute LSE
 
@@ -1468,7 +1488,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(mi));
+                const int row = get<0>(taccOcO_row(size(lse) - mi));
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { gLSE(row) = lse(mi); }
             }
         }
