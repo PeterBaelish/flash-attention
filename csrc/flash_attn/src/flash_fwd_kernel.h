@@ -718,6 +718,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //Bae: acc_o size is (4, B_r/2, Headdim/2)
     Tensor acc_o = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kHeadDim>>{});  // MMA, MMA_M, MMA_K
+    //Bae: acc_s size is (4, B_r/2, B_c/2)
+    Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
     
     //
     // Copy Atom retiling
@@ -861,8 +863,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     constexpr int n_masking_steps = cute::ceil_div(kBlockM, kBlockN); //Bae: this is for the last causal block
     #pragma unroll
     for (int masking_step = 0; masking_step < n_masking_steps; ++masking_step, --n_block) {
-        //Bae: acc_s size is (4, B_r/2, B_c/2)
-        Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
         clear(acc_s);
         flash::cp_async_wait<0>();
         __syncthreads();
@@ -963,7 +963,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     // These are the iterations where we don't need masking on S
     for (; n_block >= dst; --n_block) {
-        Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
+        //Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
         clear(acc_s);
         flash::cp_async_wait<0>();
         __syncthreads();
@@ -1248,7 +1248,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (cute::thread0()) { printf("fence 1.8\n"); }
 
         for (; n_block >= 0; --n_block) {
-            Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
+            //Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
             clear(acc_s);
             flash::cp_async_wait<0>();
             __syncthreads();
