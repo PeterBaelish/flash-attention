@@ -1102,10 +1102,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         for (int mi = 0; mi < size(lse); ++mi) {
             const int row = get<0>(taccOcO_row(mi));
             if (row < binfo.actual_seqlen_q - m_block * kBlockM) { 
+                if (tidx == 0) { printf("m_block=%d, gscore_max row=%d, mi=%d\n",  m_block, row, mi);  }
                 gLSE(row) = lse(mi); 
                 // Bae: store gscore_max and gscore_sum when m_block > N/2
                 if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1){
-                    if (cute::thread0()) { printf("gscore_max row=%d, m_block=%d\n", row, m_block);  }
                     gscores_max(row) = scores_max(mi); 
                     gscores_sum(row) = scores_sum(mi); 
                 }
@@ -1429,11 +1429,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(size(lse) -1 - mi));
-                if (cute::thread0()) { printf("frag_gscore_max row=%d, reverse_m_block=%d\n", row, reverse_m_block);  }
+                const int row = get<0>(taccOcO_row(mi));
+                if (tidx == 0) { 
+                    printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1), mi);
+                }
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
-                    fragment_scores_max(mi) = gscores_max(row); 
-                    fragment_scores_sum(mi) = gscores_sum(row); 
+                    fragment_scores_max(mi) = gscores_max(row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1)); 
+                    fragment_scores_sum(mi) = gscores_sum(row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1)); 
                 }
             }
         }
@@ -1498,8 +1500,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(size(lse) -1 - mi));
-                if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { gLSE(row) = lse(mi); }
+                const int row = get<0>(taccOcO_row(mi));
+                if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { 
+                    gLSE(row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1)) = lse(mi); 
+                }
             }
         }
 
