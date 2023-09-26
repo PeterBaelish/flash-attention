@@ -1019,6 +1019,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     
     if (cute::thread0()) { printf("fence -2\n"); }
 
+    if (cute::thread0()) 
+    { 
+        printf("fragment:\n");
+        printf("scores_max:\n");
+        print(scores_max);
+        printf("scores_sum:\n");
+        print(scores_sum);
+    }
     // Epilogue
 
     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
@@ -1097,6 +1105,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 gLSE(row) = lse(mi); 
                 // Bae: store gscore_max and gscore_sum when m_block > N/2
                 if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1){
+                    if (cute::thread0()) { printf("gscore_max row=%d, m_block=%d\n", row, m_block);  }
                     gscores_max(row) = scores_max(mi); 
                     gscores_sum(row) = scores_sum(mi); 
                 }
@@ -1420,7 +1429,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(size(lse) - mi));
+                const int row = get<0>(taccOcO_row(size(lse) -1 - mi));
+                if (cute::thread0()) { printf("frag_gscore_max row=%d, reverse_m_block=%d\n", row, reverse_m_block);  }
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
                     fragment_scores_max(mi) = gscores_max(row); 
                     fragment_scores_sum(mi) = gscores_sum(row); 
@@ -1488,7 +1498,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(size(lse) - mi));
+                const int row = get<0>(taccOcO_row(size(lse) -1 - mi));
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { gLSE(row) = lse(mi); }
             }
         }
