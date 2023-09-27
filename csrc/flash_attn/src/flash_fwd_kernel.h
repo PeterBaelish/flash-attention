@@ -1497,10 +1497,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (cute::thread0()) { printf("fence 8\n"); }
 
         // sO has the same size as sQ, so we don't need to sync here.
-        if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
+
+        rOf = flash::convert_type<Element>(rOf);
 
         Tensor taccOrOf_store = smem_thr_copy_O.retile_S(rOf);        // ((Atom,AtomNum), MMA_M, MMA_N)
         Tensor taccOsOf_store = smem_thr_copy_O.partition_D(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
+
+        if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
 
         cute::copy(smem_tiled_copy_O, taccOrOf_store, taccOsOf_store);
 
