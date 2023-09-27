@@ -1498,9 +1498,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         // sO has the same size as sQ, so we don't need to sync here.
 
-        rOf = flash::convert_type<Element>(rOf);
+        Tensor rOf_store = flash::convert_type<Element>(rOf);
 
-        Tensor taccOrOf_store = smem_thr_copy_O.retile_S(rOf);        // ((Atom,AtomNum), MMA_M, MMA_N)
+        Tensor taccOrOf_store = smem_thr_copy_O.retile_S(rOf_store);        // ((Atom,AtomNum), MMA_M, MMA_N)
         Tensor taccOsOf_store = smem_thr_copy_O.partition_D(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
 
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
