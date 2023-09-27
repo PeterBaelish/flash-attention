@@ -101,7 +101,7 @@ inline __device__ void softmax_rescale_o(Tensor0 &scores, Tensor1 &scores_max, T
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//  Bae: merge two fragments of O, stores at acc_o_1. Also merge scores_sum and scores_max,
+//  Bae: merge two fragments of O, stores at acc_o_2. Also merge scores_sum and scores_max,
 //       scores_sum stores at scores_sum_1, scores_max stores at scores_max_1
 
 template<bool Check_inf=false, typename Tensor1, typename Tensor2>
@@ -121,7 +121,7 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
         scores_scale = 1.0 / (1.0 + scores_scale);
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
-            acc_o_1_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1 - scores_scale);
+            acc_o_2_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1 - scores_scale);
         }
     }
     //We also need to compute and store l,m for LSE
@@ -1026,6 +1026,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(scores_max);
         printf("scores_sum:\n");
         print(scores_sum);
+        printf("acc_o:\n");
+        print(acc_o);
     }
     // Epilogue
 
@@ -1370,7 +1372,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         Tensor gOf = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.o_ptr) + row_offset_o_frag),
                             Shape<Int<kBlockM>, Int<kHeadDim>>{},
                             make_stride(params.o_row_stride, _1{}));
-
+        const index_t row_offset_lse_frag = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
+        gLSE = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.softmax_lse_ptr) + row_offset_lse_frag),
+                            Shape<Int<kBlockM>>{}, Stride<_1>{});
         //Bae: reload fragment from g0f to shared mem sOf (O is the same size as Q, so the copy operation is similar), stores at sQ address
         //Tensor sOf = make_tensor(sK.data() + (Kernel_traits::Share_Q_K_smem ? size(sK) : 0), typename Kernel_traits::SmemLayoutO{});    // (SMEM_M,SMEM_N)
         Tensor sOf = make_tensor(sQ.data(), typename Kernel_traits::SmemLayoutO{});    // (SMEM_M,SMEM_N)
@@ -1460,6 +1464,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(fragment_scores_max);
             printf("fragment_scores_sum:\n");
             print(fragment_scores_sum);
+            printf("rOf:\n");
+            print(rOf);
         }
 
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
@@ -1475,10 +1481,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Re-compute LSE
 
-        //Tensor acc_o_rowcol = make_tensor(acc_o.data(), flash::convert_layout_acc_rowcol(acc_o.layout()));
+        Tensor rOf_rowcol = make_tensor(rOf.data(), flash::convert_layout_acc_rowcol(rOf.layout()));
         //Tensor lse = make_fragment_like(scores_sum);
+        clear(lse);
+
         #pragma unroll
-        for (int mi = 0; mi < size<0>(acc_o_rowcol); ++mi) {
+        for (int mi = 0; mi < size<0>(rOf_rowcol); ++mi) {
             float sum = scores_sum(mi);
             float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
             lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
@@ -1491,12 +1499,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // sO has the same size as sQ, so we don't need to sync here.
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
 
-        cute::copy(smem_tiled_copy_O, taccOrO, taccOsO);
+        cute::copy(smem_tiled_copy_O, taccOrOf, taccOsOf);
 
         __syncthreads();
 
         //Tensor tOrO = make_tensor<Element>(shape(tOgO));
-        cute::copy(gmem_tiled_copy_O, tOsO, tOrO);
+        cute::copy(gmem_tiled_copy_O, tOsOf, tOrOf);
 
         //Tensor caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
         //Tensor taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
@@ -1523,11 +1531,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //Tensor tOpO = make_tensor<bool>(make_shape(size<2>(tOgO)));
         if (!Is_even_K) {
             #pragma unroll
-            for (int k = 0; k < size(tOpO); ++k) { tOpO(k) = get<1>(tOcO(0, 0, k)) < params.d; }
+            for (int k = 0; k < size(tOpOf); ++k) { tOpOf(k) = get<1>(tOcOf(0, 0, k)) < params.d; }
         }
         // Clear_OOB_K must be false since we don't want to write zeros to gmem
         flash::copy<false, Is_even_K, false, false>(
-            gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - reverse_m_block * kBlockM
+            gmem_tiled_copy_O, tOrOf, tOgOf, tOcOf, tOpOf, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
         if (cute::thread0()) { printf("fence 10\n"); }
     }
