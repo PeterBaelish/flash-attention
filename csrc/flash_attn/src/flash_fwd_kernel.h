@@ -601,7 +601,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     );
 }
 
-__device__ uint64_t CompleteMask;
+__device__ unsigned long long CompleteMask;
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn_1rowblock_causal(const Params &params, const int bidb, const int bidh, const int m_block) {
@@ -1355,7 +1355,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     __threadfence();
     const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
-    if (ThreadId() == 0) {
+    if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
 
