@@ -1397,7 +1397,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         Tensor tOcOf = gmem_thr_copy_O.partition_S(cOf);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
 
         // Allocate predicate tensors for k
-        Tensor tOpOf = make_tensor<bool>(make_shape(size<2>(tOsOf)));
+        Tensor tOpOf = make_tensor<bool>(make_shape(size<2>(tOgOf)));
 
         // Set predicates for k bounds
         if (!Is_even_K) {
@@ -1499,12 +1499,17 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // sO has the same size as sQ, so we don't need to sync here.
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
 
-        cute::copy(smem_tiled_copy_O, taccOrOf, taccOsOf);
+        Tensor taccOrOf_store = smem_thr_copy_O.retile_S(rOf);        // ((Atom,AtomNum), MMA_M, MMA_N)
+        Tensor taccOsOf_store = smem_thr_copy_O.partition_D(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
 
+        cute::copy(smem_tiled_copy_O, taccOrOf_store, taccOsOf_store);
+
+        Tensor tOgOf_store = gmem_thr_copy_O.partition_D(gOf);
+        Tensor tOsOf_store = gmem_thr_copy_O.partition_S(sOf);
         __syncthreads();
+        Tensor tOrOf_store = make_tensor<Element>(shape(tOgOf_store));
 
-        //Tensor tOrO = make_tensor<Element>(shape(tOgO));
-        cute::copy(gmem_tiled_copy_O, tOsOf, tOrOf);
+        cute::copy(gmem_tiled_copy_O, tOsOf_store, tOrOf_store);
 
         //Tensor caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
         //Tensor taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
@@ -1525,17 +1530,19 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         if (cute::thread0()) { printf("fence 9\n"); }
 
         // Construct identity layout for sO
-        //Tensor cO = make_identity_tensor(make_shape(size<0>(sO), size<1>(sO)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
+        Tensor cOf_store = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
         // Repeat the partitioning with identity layouts
-        //Tensor tOcO = gmem_thr_copy_O.partition_D(cO);                           // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
-        //Tensor tOpO = make_tensor<bool>(make_shape(size<2>(tOgO)));
+        Tensor tOcOf_store = gmem_thr_copy_O.partition_D(cOf_store);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
+        // Allocate predicate tensors for k
+        Tensor tOpOf_store = make_tensor<bool>(make_shape(size<2>(tOgOtOgOf_storef)));
+        
         if (!Is_even_K) {
             #pragma unroll
-            for (int k = 0; k < size(tOpOf); ++k) { tOpOf(k) = get<1>(tOcOf(0, 0, k)) < params.d; }
+            for (int k = 0; k < size(tOpOf_store); ++k) { tOpOf_store(k) = get<1>(tOcOf_store(0, 0, k)) < params.d; }
         }
         // Clear_OOB_K must be false since we don't want to write zeros to gmem
         flash::copy<false, Is_even_K, false, false>(
-            gmem_tiled_copy_O, tOrOf, tOgOf, tOcOf, tOpOf, binfo.actual_seqlen_q - reverse_m_block * kBlockM
+            gmem_tiled_copy_O, tOrOf_store, tOgOf_store, tOcOf_store, tOpOf_store, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
         if (cute::thread0()) { printf("fence 10\n"); }
     }
