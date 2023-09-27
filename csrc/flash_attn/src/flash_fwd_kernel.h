@@ -1534,7 +1534,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // Repeat the partitioning with identity layouts
         Tensor tOcOf_store = gmem_thr_copy_O.partition_D(cOf_store);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
         // Allocate predicate tensors for k
-        Tensor tOpOf_store = make_tensor<bool>(make_shape(size<2>(tOgOtOgOf_storef)));
+        Tensor tOpOf_store = make_tensor<bool>(make_shape(size<2>(tOgOf_store)));
         
         if (!Is_even_K) {
             #pragma unroll
