@@ -601,6 +601,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     );
 }
 
+__device__ uint64_t CompleteMask;
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn_1rowblock_causal(const Params &params, const int bidb, const int bidh, const int m_block) {
@@ -628,6 +629,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
+    atomicAnd(&CompleteMask, 0);
     
     if (cute::thread0()) { printf("fence -7\n"); }
 
@@ -1026,8 +1028,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(scores_max);
         printf("scores_sum:\n");
         print(scores_sum);
-        printf("acc_o:\n");
-        print(acc_o);
     }
     // Epilogue
 
@@ -1047,6 +1047,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
 
+    if (m_block == 2 && tidx == 0) 
+    { 
+        printf("acc_o:\n");
+        print(acc_o);
+    }
     // Convert acc_o from fp32 to fp16/bf16
     Tensor rO = flash::convert_type<Element>(acc_o);
     //Bae: O in shared memory replace Q!!
@@ -1349,6 +1354,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     __threadfence();
+    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
+    if (ThreadId() == 0) {
+        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+    }
 
     if (cute::thread0()) { printf("fence 3\n"); }
 
@@ -1477,6 +1486,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(scores_max);
             printf("scores_sum:\n");
             print(scores_sum);
+            printf("rOf:\n");
+            print(rOf);         
         }
 
         //Bae: Re-compute LSE
