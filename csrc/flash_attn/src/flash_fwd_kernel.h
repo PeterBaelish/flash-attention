@@ -1019,7 +1019,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     
     if (cute::thread0()) { printf("fence -2\n"); }
 
-    if (cute::thread0()) 
+    if (m_block == 2 && tidx == 0) 
     { 
         printf("fragment:\n");
         printf("scores_max:\n");
@@ -1102,7 +1102,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         for (int mi = 0; mi < size(lse); ++mi) {
             const int row = get<0>(taccOcO_row(mi));
             if (row < binfo.actual_seqlen_q - m_block * kBlockM) { 
-                if (tidx == 0) { printf("m_block=%d, gscore_max row=%d, mi=%d\n",  m_block, row, mi);  }
+                //if (tidx == 0) { printf("m_block=%d, gscore_max row=%d, mi=%d\n",  m_block, row, mi);  }
                 gLSE(row) = lse(mi); 
                 // Bae: store gscore_max and gscore_sum when m_block > N/2
                 if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1){
@@ -1358,6 +1358,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2) {
            
         //Bae: fragment 1 to d/2-f(m_block) stored at sO, d/2-f(m_block) to d-f(m_block) stored at global mem somewhere, we need to recompute pointers
+        const index_t row_offset_frag_scores_max = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
+        const index_t row_offset_frag_scores_sum = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
+        gscores_max = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_max_ptr) +row_offset_frag_scores_max),
+                                Shape<Int<kBlockM>>{}, Stride<_1>{});
+        gscores_sum = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_sum_ptr) +row_offset_frag_scores_sum),
+                                Shape<Int<kBlockM>>{}, Stride<_1>{});
+        
         const index_t row_offset_o_frag = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
             + reverse_m_block * kBlockM * params.o_row_stride + bidh * params.o_head_stride;
         Tensor gOf = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.o_ptr) + row_offset_o_frag),
@@ -1431,11 +1438,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             for (int mi = 0; mi < size(lse); ++mi) {
                 const int row = get<0>(taccOcO_row(mi));
                 if (tidx == 0) { 
-                    printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1), mi);
+                    printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row, mi);
                 }
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
-                    fragment_scores_max(mi) = gscores_max(row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1)); 
-                    fragment_scores_sum(mi) = gscores_sum(row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1)); 
+                    fragment_scores_max(mi) = gscores_max(row); 
+                    fragment_scores_sum(mi) = gscores_sum(row); 
                 }
             }
         }
@@ -1502,7 +1509,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             for (int mi = 0; mi < size(lse); ++mi) {
                 const int row = get<0>(taccOcO_row(mi));
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { 
-                    gLSE(row + kBlockM * (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - (m_block + 1) * 2 + 1)) = lse(mi); 
+                    gLSE(row) = lse(mi); 
                 }
             }
         }
