@@ -1020,7 +1020,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
     
     if (cute::thread0()) { printf("fence -2\n"); }
-
+    __threadfence();
+    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
+    if (tidx == 0) {
+        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+    }
+    atomicAnd(&CompleteMask, 0);
     if (m_block == 2 && tidx == 0) 
     { 
         printf("fragment:\n");
