@@ -1348,6 +1348,22 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
     } 
+    __threadfence();
+    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
+    if (tidx == 0) {
+        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+    }
+    atomicAnd(&CompleteMask, 0);
+    if (cute::thread0()) 
+    { 
+        printf("fragment:\n");
+        printf("scores_max:\n");
+        print(scores_max);
+        printf("scores_sum:\n");
+        print(scores_sum);
+        printf("acc_o:\n");
+        print(acc_o);
+    }
 
     if (cute::thread0()) { printf("fence 2\n"); }
 
@@ -1474,6 +1490,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(scores_max);
             printf("scores_sum:\n");
             print(scores_sum);
+            printf("acc_o:\n");
+            print(acc_o);
             printf("fragment_scores_max:\n");
             print(fragment_scores_max);
             printf("fragment_scores_sum:\n");
