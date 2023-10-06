@@ -636,7 +636,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
-    atomicAnd(&CompleteMask, 0);
     
     if (cute::thread0()) { printf("fence -7\n"); }
 
@@ -1027,7 +1026,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
     
     if (cute::thread0()) { printf("fence -2\n"); }
-
+    __threadfence();
+    atomicAnd(&CompleteMask, 0);
+    if (tidx == 0) {
+        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+    } 
     if (m_block == 2 && tidx == 0) 
     { 
         printf("fragment:\n");
@@ -1061,10 +1064,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
     __threadfence();
     const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
+    atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
-    atomicAnd(&CompleteMask, 0);
     // Convert acc_o from fp32 to fp16/bf16
     Tensor rO = flash::convert_type<Element>(acc_o);
     //Bae: O in shared memory replace Q!!
@@ -1149,7 +1152,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     if (cute::thread0()) { printf("fence 1\n"); }
 
-    
+    __threadfence();
+    atomicAnd(&CompleteMask, 0);
+    if (tidx == 0) {
+        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+    }    
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1283,8 +1290,16 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             __syncthreads();
             // Advance gV
             if (cute::thread0()) { printf("fence 1.81\n"); }
-            tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
-            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+            if (n_block > 0) {
+                tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
+                flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+            } else {
+                // Clear the smem tiles to account for predicated off loads
+                flash::copy<Is_even_N, Is_even_K, true>(
+                    gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV, binfo.actual_seqlen_k - n_block * kBlockN
+                );
+            }
+
             cute::cp_async_fence();
 
             flash::gemm<Kernel_traits::Is_Q_in_regs>(
@@ -1307,8 +1322,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
 
             n_block == n_block_max - 1
-            ? softmax_rescale_o<true>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
-            : softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+                ? softmax_rescale_o<true, false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
+                : softmax_rescale_o<false, false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
             Tensor rP = flash::convert_type<Element>(scores);
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
@@ -1331,17 +1346,17 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
                                     block_row_idx, block_col_idx, kNWarps);
             }
-            if (cute::thread0()) { printf("fence 1.84\n"); }
+            if (cute::thread0()) { 
+                printf("tOrVt:\n"); print(tOrVt); 
+                printf("tOrP:\n"); print(tOrP); 
+                printf("acc_o:\n"); print(acc_o); 
+            }
             flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
             if (cute::thread0()) { printf("fence 1.85\n"); }
         }
 
         if (cute::thread0()) { printf("fence 1.875\n"); }
-        __threadfence();
-        if (tidx == 0) {
-            while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
-        }
-        atomicAnd(&CompleteMask, 0);
+
         if (cute::thread0()) 
         { 
             printf("fragment:\n");
@@ -1372,10 +1387,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     } 
     __threadfence();
+    atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
-    atomicAnd(&CompleteMask, 0);
     if (cute::thread0()) 
     { 
         printf("fragment:\n");
@@ -1397,6 +1412,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     __threadfence();
+    atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
