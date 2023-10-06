@@ -1290,7 +1290,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             __syncthreads();
             // Advance gV
             if (cute::thread0()) { printf("fence 1.81\n"); }
-            if (n_block > 0) {
+            if (n_block < n_block_max - 1) {
                 tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
                 flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
             } else {
@@ -1309,14 +1309,17 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
             flash::cp_async_wait<0>();
             __syncthreads();
-            if (n_block > 0) {
+            if (n_block < n_block_max - 1) {
                 // Advance gK
                 tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
                 flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
-                // This cp_async_fence needs to be in the if block, otherwise the synchronization
-                // isn't right and we get race conditions.
-                cute::cp_async_fence();
+            } else {
+                flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             }
+            // This cp_async_fence needs to be in the if block, otherwise the synchronization
+            // isn't right and we get race conditions.
+            cute::cp_async_fence();
+
             if (cute::thread0()) { printf("fence 1.82\n"); }
             // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
