@@ -636,7 +636,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
-    
+    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
+
     if (cute::thread0()) { printf("fence -7\n"); }
 
     using Element = typename Kernel_traits::Element;
@@ -1063,7 +1064,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(acc_o);
     }
     __threadfence();
-    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
