@@ -108,6 +108,9 @@ template<bool Check_inf=false, typename Tensor1, typename Tensor2>
 inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_sum_1,
                                        Tensor1 &scores_max_2, Tensor1 &scores_sum_2,
                                        Tensor2 &acc_o_1, Tensor2 &acc_o_2) {
+    int tidx = threadIdx.x;
+    int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
+    
     Tensor scores_max = make_fragment_like(scores_max_1);
     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
     Tensor acc_o_1_rowcol = make_tensor(acc_o_1.data(), flash::convert_layout_acc_rowcol(acc_o_1.layout()));
@@ -119,9 +122,11 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
         float scores_scale = (scores_sum_2(mi) / scores_sum_1(mi))
                              * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E);
         scores_scale = 1.0 / (1.0 + scores_scale);
+        if(tidx == 0 && block_id == 0)
+            printf("scores_scale=%d\n",scores_scale);
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
-            acc_o_2_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1 - scores_scale);
+            acc_o_2_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1.0 - scores_scale);
         }
     }
     //We also need to compute and store l,m for LSE
@@ -1349,7 +1354,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     } 
     __threadfence();
-    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
@@ -1375,7 +1379,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     __threadfence();
-    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
