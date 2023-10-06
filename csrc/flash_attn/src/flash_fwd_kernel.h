@@ -123,10 +123,12 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
                              * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E);
         scores_scale = 1.0 / (1.0 + scores_scale);
         if(tidx == 0 && block_id == 0)
-            printf("scores_scale=%d\n",scores_scale);
+            printf("scores_scale=%f\n",scores_scale);
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
             acc_o_2_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1.0 - scores_scale);
+            if(tidx == 0 && block_id == 0)
+                printf("acc_o_2_rowcol(mi, ni)=%f\n",acc_o_2_rowcol(mi, ni));
         }
     }
     //We also need to compute and store l,m for LSE
@@ -1025,12 +1027,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
     
     if (cute::thread0()) { printf("fence -2\n"); }
-    __threadfence();
-    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
-    if (tidx == 0) {
-        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
-    }
-    atomicAnd(&CompleteMask, 0);
+
     if (m_block == 2 && tidx == 0) 
     { 
         printf("fragment:\n");
@@ -1062,6 +1059,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         printf("acc_o:\n");
         print(acc_o);
     }
+    __threadfence();
+    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
+    if (tidx == 0) {
+        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+    }
+    atomicAnd(&CompleteMask, 0);
     // Convert acc_o from fp32 to fp16/bf16
     Tensor rO = flash::convert_type<Element>(acc_o);
     //Bae: O in shared memory replace Q!!
@@ -1334,7 +1337,22 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
         if (cute::thread0()) { printf("fence 1.875\n"); }
-
+        __threadfence();
+        if (tidx == 0) {
+            while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+        }
+        atomicAnd(&CompleteMask, 0);
+        if (cute::thread0()) 
+        { 
+            printf("fragment:\n");
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("acc_o:\n");
+            print(acc_o);
+        }
+        if (cute::thread0()) { printf("fence 1.9\n"); }
         // Epilogue
 
         // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
@@ -1527,6 +1545,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             float sum = scores_sum(mi);
             float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
             lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
+            /*float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
+            #pragma unroll
+            for (int ni = 0; ni < size<1>(rOf_rowcol); ++ni) { rOf_rowcol(mi, ni) *= scale; }*/
         }
 
         //Bae: load final result to glb_mem
