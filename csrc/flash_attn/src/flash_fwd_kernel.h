@@ -1032,7 +1032,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     } 
-    if (m_block == 2 && tidx == 0) 
+    if (m_block == 2 && tidx == 64) 
     { 
         printf("fragment:\n");
         printf("scores_max:\n");
@@ -1058,7 +1058,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
 
-    if (m_block == 2 && tidx == 0) 
+    if (m_block == 2 && tidx == 64) 
     { 
         printf("acc_o:\n");
         print(acc_o);
@@ -1151,6 +1151,16 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     );
 
     if (cute::thread0()) { printf("fence 1\n"); }
+
+    if (m_block == 2 && tidx == 64) 
+    { 
+        printf("gscores_max:\n");
+        print(gscores_max);
+        printf("gscores_sum:\n");
+        print(gscores_sum);
+        printf("gO:\n");
+        print(gO);
+    }
 
     __threadfence();
     atomicAnd(&CompleteMask, 0);
@@ -1511,7 +1521,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
                 const int row = get<0>(taccOcO_row(mi));
-                if (tidx == 0) { 
+                if (tidx == 64) { 
                     printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row, mi);
                 }
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
@@ -1523,7 +1533,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        if (cute::thread0()) 
+        if (m_block == 0 && tidx == 64) 
         { 
             printf("fence 7\n");
             printf("scores_max:\n");
@@ -1542,7 +1552,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
-        if (cute::thread0()) 
+        if (m_block == 0 && tidx == 64) 
         { 
             printf("fence 7.5 merge result\n");
             printf("scores_max:\n");
