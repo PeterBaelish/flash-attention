@@ -1564,7 +1564,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
-        if (m_block == 0 && tidx == 64) 
+        if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 7.5 merge result\n");
             printf("scores_max:\n");
