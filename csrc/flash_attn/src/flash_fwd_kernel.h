@@ -1184,12 +1184,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             
         n_block_max = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN);
         n_block = n_block_max - 1;
-        if (cute::thread0()) { printf("n_block_max=%d\n", n_block_max); 
+        /*if (cute::thread0()) { printf("n_block_max=%d\n", n_block_max); 
         printf("binfo.actual_seqlen_k=%d\n", binfo.actual_seqlen_k); 
         printf("kBlockN=%d\n", kBlockN); 
         printf("m_block=%d\n", m_block);
         printf("kBlockM=%d\n", kBlockM); 
-        }
+        }*/
         //Bae: recompute pointers to ptr(N-m_block) blocks fragment
         const index_t row_offset_q_frag = binfo.q_offset(params.q_batch_stride, params.q_row_stride, bidb)
             + reverse_m_block * kBlockM * params.q_row_stride + bidh * params.q_head_stride;
@@ -1213,7 +1213,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         gP = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.p_ptr) + row_offset_p_frag),
                                 Shape<Int<kBlockM>, Int<kBlockN>>{},
                                 make_stride(params.seqlen_k_rounded, _1{}));
-        if (cute::thread0()) { printf("fence 1.5\n"); }
+        //if (cute::thread0()) { printf("fence 1.5\n"); }
         //sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
         //                        typename Kernel_traits::SmemLayoutQ{});
         // Careful we're using the same smem for sQ and sK | sV if Share_Q_K_smem;
@@ -1289,13 +1289,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //    params.rng_state[1] = std::get<1>(seeds);
         //}
 
-        if (cute::thread0()) { printf("fence 1.75\n"); }
+        //if (cute::thread0()) { printf("fence 1.75\n"); }
 
         clear(acc_o);
         clear(scores_max);
         clear(scores_sum);
         
-        if (cute::thread0()) { printf("fence 1.8\n"); }
+        //if (cute::thread0()) { printf("fence 1.8\n"); }
 
         for (; n_block >= 0; --n_block) {
             //Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
@@ -1303,7 +1303,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             flash::cp_async_wait<0>();
             __syncthreads();
             // Advance gV
-            if (cute::thread0()) { printf("fence 1.81\n"); }
+            //if (cute::thread0()) { printf("fence 1.81\n"); }
             if (n_block < n_block_max - 1) {
                 tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
                 flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
@@ -1334,7 +1334,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             // isn't right and we get race conditions.
             cute::cp_async_fence();
 
-            if (cute::thread0()) { printf("fence 1.82\n"); }
+            //if (cute::thread0()) { printf("fence 1.82\n"); }
             // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
 
@@ -1346,7 +1346,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
             // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
             Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_rowcol_Aregs<Kernel_traits::TiledMma>(rP.layout()));
-            if (cute::thread0()) { printf("fence 1.83\n"); }
+            //if (cute::thread0()) { printf("fence 1.83\n"); }
             uint32_t block_row_idx = reverse_m_block * (kBlockM / 16) + tidx / 32;
             uint32_t block_col_idx = n_block * (kBlockN / 32);
             if (Return_softmax) {
@@ -1363,18 +1363,18 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
                                     block_row_idx, block_col_idx, kNWarps);
             }
-            if (cute::thread0()) { 
+            /*if (cute::thread0()) { 
                 printf("tOrVt:\n"); print(tOrVt); 
                 printf("tOrP:\n"); print(tOrP); 
                 printf("acc_o:\n"); print(acc_o); 
-            }
+            }*/
             flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
-            if (cute::thread0()) { printf("fence 1.85\n"); }
+            //if (cute::thread0()) { printf("fence 1.85\n"); }
         }
 
-        if (cute::thread0()) { printf("fence 1.875\n"); }
+        //if (cute::thread0()) { printf("fence 1.875\n"); }
 
-        if (cute::thread0()) 
+        /*if (cute::thread0()) 
         { 
             printf("fragment:\n");
             printf("scores_max:\n");
@@ -1383,8 +1383,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(scores_sum);
             printf("acc_o:\n");
             print(acc_o);
-        }
-        if (cute::thread0()) { printf("fence 1.9\n"); }
+        }*/
+        //if (cute::thread0()) { printf("fence 1.9\n"); }
         // Epilogue
 
         // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
@@ -1409,7 +1409,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
     __syncthreads();
-    if (cute::thread0()) 
+    /*if (cute::thread0()) 
     { 
         printf("fragment:\n");
         printf("scores_max:\n");
@@ -1418,9 +1418,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(scores_sum);
         printf("acc_o:\n");
         print(acc_o);
-    }
+    }*/
 
-    if (cute::thread0()) { printf("fence 2\n"); }
+    //if (cute::thread0()) { printf("fence 2\n"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1491,14 +1491,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             for (int k = 0; k < size(tOpOf); ++k) { tOpOf(k) = get<1>(tOcOf(0, 0, k)) < params.d; }
         }
 
-        if (cute::thread0()) { printf("fence 5\n"); }
+        //if (cute::thread0()) { printf("fence 5\n"); }
 
         // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
         flash::copy<false, Is_even_K, false, false>(
             gmem_tiled_copy_O, tOgOf, tOrOf, tOcOf, tOpOf, binfo.actual_seqlen_q - reverse_m_block * kBlockM);
- 
+        __syncthreads(); 
         cute::copy(gmem_tiled_copy_O, tOrOf, tOsOf);
-
+        __syncthreads(); 
         Tensor rOf = make_fragment_like(acc_o);
 
         Tensor taccOrOf = smem_thr_copy_O.retile_D(rOf);        // ((Atom,AtomNum), MMA_M, MMA_N)
@@ -1507,10 +1507,23 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // sO has the same size as sQ, so we don't need to sync here.
         if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
 
-        if (cute::thread0()) { printf("fence 6\n"); }
+        //if (cute::thread0()) { printf("fence 6\n"); }
 
         cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
-
+        if (m_block == 0 && tidx == 64) 
+        { 
+            printf("fence 6.6\n");
+            printf("tOgOf:\n");
+            print(tOgOf);
+            printf("tOrOf:\n");
+            print(tOrOf);
+            printf("tOsOf:\n");
+            print(tOsOf);
+            printf("taccOsOf:\n");
+            print(taccOsOf);
+            printf("taccOrOf:\n");
+            print(taccOrOf);
+        }
         //Bae: We need to store and load score_max and score_sum. So new memory should be assign to score_max and score_sum.
         //     For each block, the size is KblockM * 1.
 
@@ -1555,10 +1568,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             printf("rOf:\n");
             print(rOf);
         }
-        if (cute::thread0()) { 
-            printf("gOf\n"); 
-            print(gOf);
-        }
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
         if (m_block == 0 && tidx == 64) 
@@ -1590,7 +1599,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: load final result to glb_mem
 
-        if (cute::thread0()) { printf("fence 8\n"); }
+        //if (cute::thread0()) { printf("fence 8\n"); }
 
         // sO has the same size as sQ, so we don't need to sync here.
 
@@ -1626,7 +1635,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             }
         }
 
-        if (cute::thread0()) { printf("fence 9\n"); }
+        //if (cute::thread0()) { printf("fence 9\n"); }
 
         // Construct identity layout for sO
         Tensor cOf_store = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
