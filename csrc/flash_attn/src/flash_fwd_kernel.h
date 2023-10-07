@@ -122,13 +122,9 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
         float scores_scale = (scores_sum_2(mi) / scores_sum_1(mi))
                              * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E);
         scores_scale = 1.0 / (1.0 + scores_scale);
-        if(tidx == 0 && block_id == 0)
-            printf("scores_scale=%f\n",scores_scale);
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
             acc_o_2_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1.0 - scores_scale);
-            if(tidx == 0 && block_id == 0)
-                printf("acc_o_2_rowcol(mi, ni)=%f\n",acc_o_2_rowcol(mi, ni));
         }
     }
     //We also need to compute and store l,m for LSE
@@ -1470,7 +1466,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         Tensor sOf = make_tensor(sQ.data(), typename Kernel_traits::SmemLayoutO{});    // (SMEM_M,SMEM_N)
 
         //typename Kernel_traits::GmemTiledCopyO gmem_tiled_copy_O;
-        //auto gmem_thr_copy_O = gmem_tiled_copy_O.get_thread_slice(tidx);
+        gmem_thr_copy_O = gmem_tiled_copy_O.get_thread_slice(tidx);
 
         Tensor tOgOf = gmem_thr_copy_O.partition_S(gOf);
         Tensor tOsOf = gmem_thr_copy_O.partition_D(sOf);
@@ -1487,7 +1483,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         Tensor tOcOf = gmem_thr_copy_O.partition_S(cOf);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
 
         // Allocate predicate tensors for k
-        Tensor tOpOf = make_tensor<bool>(make_shape(size<2>(tOgOf)));
+        Tensor tOpOf = make_tensor<bool>(make_shape(size<2>(tOsOf)));
 
         // Set predicates for k bounds
         if (!Is_even_K) {
@@ -1559,7 +1555,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             printf("rOf:\n");
             print(rOf);
         }
-
+        if (cute::thread0()) { 
+            printf("gOf\n"); 
+            print(gOf);
+        }
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
         if (m_block == 0 && tidx == 64) 
