@@ -1643,7 +1643,20 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         flash::copy<false, Is_even_K, false, false>(
             gmem_tiled_copy_O, tOrOf_store, tOgOf_store, tOcOf_store, tOpOf_store, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
-        if (cute::thread0()) { printf("fence 10\n"); }
+        if (m_block == 0 && tidx == 66) 
+        { 
+            printf("fence 9.9\n");
+            printf("tOgOf_store:\n");
+            print(tOgOf_store);
+            printf("tOrOf_store:\n");
+            print(tOrOf_store);
+            printf("tOsOf:\n");
+            print(tOsOf);
+            printf("taccOrOf_store:\n");
+            print(taccOrOf_store);
+            printf("taccOsOf_store:\n");
+            print(taccOsOf_store);
+        }
     }
     /**/
 }
