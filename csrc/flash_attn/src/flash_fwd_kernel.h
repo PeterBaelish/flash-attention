@@ -1029,7 +1029,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
     __syncthreads();
-    if (m_block == 2 && tidx == 64) 
+    if (m_block == 2 && tidx == 66) 
     { 
         printf("fragment:\n");
         printf("scores_max:\n");
@@ -1054,13 +1054,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
-    __threadfence();
-    atomicAnd(&CompleteMask, 0);
-    if (tidx == 0) {
-        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
-    }
-    __syncthreads();
-    if (m_block == 2 && tidx == 64) 
+    if (m_block == 2 && tidx == 66) 
     { 
         printf("acc_o:\n");
         print(acc_o);
@@ -1087,7 +1081,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     cute::copy(smem_tiled_copy_O, taccOrO, taccOsO);
 
-    if (cute::thread0()) { printf("fence -1\n"); }
+    //if (cute::thread0()) { printf("fence -1\n"); }
 
     const index_t row_offset_o = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
         + m_block * kBlockM * params.o_row_stride + bidh * params.o_head_stride;
@@ -1112,7 +1106,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     __syncthreads();
 
-    if (cute::thread0()) { printf("fence 0\n"); }
+    //if (cute::thread0()) { printf("fence 0\n"); }
 
     Tensor tOrO = make_tensor<Element>(shape(tOgO));
     cute::copy(gmem_tiled_copy_O, tOsO, tOrO);
@@ -1153,9 +1147,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - m_block * kBlockM
     );
 
-    if (cute::thread0()) { printf("fence 1\n"); }
+    //if (cute::thread0()) { printf("fence 1\n"); }
 
-    if (m_block == 2 && tidx == 64) 
+    if (m_block == 2 && tidx == 66) 
     { 
         printf("gscores_max:\n");
         print(gscores_max);
@@ -1510,7 +1504,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //if (cute::thread0()) { printf("fence 6\n"); }
 
         cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
-        if (m_block == 0 && tidx == 64) 
+        if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 6.6\n");
             printf("tOgOf:\n");
@@ -1540,7 +1534,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
                 const int row = get<0>(taccOcO_row(mi));
-                if (tidx == 64) { 
+                if (tidx == 66) { 
                     printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row, mi);
                 }
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
@@ -1552,7 +1546,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        if (m_block == 0 && tidx == 64) 
+        if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 7\n");
             printf("scores_max:\n");
@@ -1592,9 +1586,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             float sum = scores_sum(mi);
             float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
             lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
-            /*float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
-            #pragma unroll
-            for (int ni = 0; ni < size<1>(rOf_rowcol); ++ni) { rOf_rowcol(mi, ni) *= scale; }*/
         }
 
         //Bae: load final result to glb_mem
