@@ -1031,7 +1031,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
-    } 
+    }
+    __syncthreads();
     if (m_block == 2 && tidx == 64) 
     { 
         printf("fragment:\n");
@@ -1057,7 +1058,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
-
+    __threadfence();
+    atomicAnd(&CompleteMask, 0);
+    if (tidx == 0) {
+        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+    }
+    __syncthreads();
     if (m_block == 2 && tidx == 64) 
     { 
         printf("acc_o:\n");
@@ -1068,6 +1074,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
+    __syncthreads();
     // Convert acc_o from fp32 to fp16/bf16
     Tensor rO = flash::convert_type<Element>(acc_o);
     //Bae: O in shared memory replace Q!!
@@ -1166,7 +1173,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
-    }    
+    }
+    __syncthreads();    
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1404,6 +1412,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
+    __syncthreads();
     if (cute::thread0()) 
     { 
         printf("fragment:\n");
@@ -1429,6 +1438,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
+    __syncthreads();
 
     if (cute::thread0()) { printf("fence 3\n"); }
 
