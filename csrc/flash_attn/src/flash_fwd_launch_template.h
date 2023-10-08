@@ -17,11 +17,11 @@ __global__ void flash_fwd_kernel(Flash_fwd_params params) {
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax>
 __global__ void flash_fwd_kernel_casual(Flash_fwd_params params) {
-    int tidx = threadIdx.x;
+    /*int tidx = threadIdx.x;
     // The global block index.
     int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
     if(tidx == 0 && block_id == 0)
-        printf("z\n");
+        printf("z\n");*/
     flash::compute_attn_casual<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params);
 }
 
@@ -30,7 +30,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     constexpr size_t smem_size = Kernel_traits::kSmemSize;
     
     printf("fuck you smem_size = %d\n", smem_size);
-    printf("y\n");
+    //printf("y\n");
 
     // Work-around for gcc 7. It doesn't like nested BOOL_SWITCH.
     // https://github.com/kokkos/kokkos-kernels/issues/349
@@ -74,10 +74,10 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                     &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                 // printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
-                printf("yy\n");
+                //printf("yy\n");
                 kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params);
                 C10_CUDA_KERNEL_LAUNCH_CHECK();  
-                printf("yyy\n");
+                //printf("yyy\n");
             });
         });
     });

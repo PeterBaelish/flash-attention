@@ -186,7 +186,7 @@ void set_params_dgrad(Flash_bwd_params &params,
 }
 
 void run_mha_fwd(Flash_fwd_params &params, cudaStream_t stream) {
-    printf("c\n");
+    //printf("c\n");
     FP16_SWITCH(!params.is_bf16, [&] {
         FWD_HEADDIM_SWITCH(params.d, [&] {
             run_mha_fwd_<elem_type, kHeadDim>(params, stream);
@@ -205,7 +205,7 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
         const bool return_softmax,
         c10::optional<at::Generator> gen_) {
 
-    printf("a\n");
+    //printf("a\n");
 
     auto dprops = at::cuda::getCurrentDeviceProperties();
     // bool is_sm75 = dprops->major == 7 && dprops->minor == 5;
@@ -330,18 +330,18 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
 
     auto stream = at::cuda::getCurrentCUDAStream().stream();
 
-    printf("b\n");
+    //printf("b\n");
 
     run_mha_fwd(params, stream);
 
-    printf("d\n");
+    //printf("d\n");
 
     at::Tensor out_padded = out;
     if (head_size_og % 8 != 0) {
         out = out.index({"...", torch::indexing::Slice(torch::indexing::None, head_size_og)});
         if (out_.has_value()) { out_.value().copy_(out); }
     }
-    printf("e\n");
+    //printf("e\n");
     return {out, q_padded, k_padded, v_padded, out_padded, softmax_lse, p, rng_state};
 }
 
