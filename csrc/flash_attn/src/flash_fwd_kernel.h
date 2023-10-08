@@ -1712,9 +1712,9 @@ inline __device__ void compute_attn_casual(const Params &params) {
     // the 16 x 32 block within the attention matrix, we can generate the exact same dropout pattern.
 
     if(!Is_causal)
-        flash::compute_attn_1rowblock<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh, m_block);
+        flash::compute_attn_1rowblock<Kernel_traits, Is_dropout, true/*Is_causal*/, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh, m_block);
     else
-        flash::compute_attn_1rowblock_causal<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh, m_block);
+        flash::compute_attn_1rowblock_causal<Kernel_traits, Is_dropout, true/*Is_causal*/, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh, m_block);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
