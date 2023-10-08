@@ -1532,6 +1532,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
         if (m_block == 0 && tidx == 66) {
             printf("get<1>(taccOcO_row(0))=%d\n", get<1>(taccOcO_row(0)));
+            printf("size(taccOcO_row(0))=%d\n", size(taccOcO_row(0)));
+            printf("rank(taccOcO_row(0))=%d\n", rank(taccOcO_row(0)));
+            printf("size(taccOcO_row)=%d\n", size(taccOcO_row));
+            printf("rank(taccOcO_row)=%d\n", rank(taccOcO_row));
             //print(taccOcO_row);
         }
         //if (get<1>(taccOcO_row(0)) == 0) {
@@ -1620,7 +1624,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
         //Tensor taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
         //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
-        if (get<1>(taccOcO_row(0)) == 0) {
+        //if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
                 const int row = get<0>(taccOcO_row(mi));
@@ -1628,7 +1632,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                     gLSE(row) = lse(mi); 
                 }
             }
-        }
+        //}
 
         //if (cute::thread0()) { printf("fence 9\n"); }
 
