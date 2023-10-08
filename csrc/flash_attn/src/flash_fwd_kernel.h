@@ -1036,6 +1036,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(scores_max);
         printf("scores_sum:\n");
         print(scores_sum);
+        printf("acc_o:\n");
+        print(acc_o);
     }
     // Epilogue
 
@@ -1051,6 +1053,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
+        if (m_block == 2 && tidx == 66) 
+        { 
+            printf("scale = %d\n", scale)
+        }
     }
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
@@ -1098,7 +1104,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                             Shape<Int<kBlockM>>{}, Stride<_1>{});
     Tensor gscores_sum = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_sum_ptr) +row_offset_scores_sum),
                             Shape<Int<kBlockM>>{}, Stride<_1>{});
-    if (cute::thread0()) { printf("fence -0.5\n"); }
     typename Kernel_traits::GmemTiledCopyO gmem_tiled_copy_O;
     auto gmem_thr_copy_O = gmem_tiled_copy_O.get_thread_slice(tidx);
     Tensor tOsO = gmem_thr_copy_O.partition_S(sO);        // ((Atom,AtomNum),ATOM_M,ATOM_N)
