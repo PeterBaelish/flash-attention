@@ -634,7 +634,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     */
     const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
 
-    if (cute::thread0()) { printf("fence -7\n"); }
+    //if (cute::thread0()) { printf("fence -7\n"); }
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -700,7 +700,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     Tensor sVt = make_tensor(sV.data(), typename Kernel_traits::SmemLayoutVtransposed{});
     Tensor sVtNoSwizzle = make_tensor(sV.data(), typename Kernel_traits::SmemLayoutVtransposedNoSwizzle{});
 
-    if (cute::thread0()) { printf("fence -6.5\n"); }
+    //if (cute::thread0()) { printf("fence -6.5\n"); }
 
     typename Kernel_traits::GmemTiledCopyQKV gmem_tiled_copy_QKV;
     auto gmem_thr_copy_QKV = gmem_tiled_copy_QKV.get_thread_slice(tidx);
@@ -747,7 +747,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     // TODO: this might need to change if we change the mma instruction in SM70
 
-    if (cute::thread0()) { printf("fence -6\n"); }
+    //if (cute::thread0()) { printf("fence -6\n"); }
 
     //Bae: B_r
     Tensor scores_max = make_tensor<ElementAccum>(Shape<Int<2 * size<1>(acc_o)>>{}); 
@@ -793,7 +793,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         for (int k = 0; k < size(tKVpKV); ++k) { tKVpKV(k) = get<1>(tKVcKV(0, 0, k)) < params.d; }
     }
 
-    if (cute::thread0()) { printf("fence -5\n"); }
+    //if (cute::thread0()) { printf("fence -5\n"); }
 
     // Prologue
 
@@ -855,7 +855,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     clear(acc_o);
 
-    if (cute::thread0()) { printf("fence -4\n"); }
+    //if (cute::thread0()) { printf("fence -4\n"); }
 
     // For performance reason, we separate out two kinds of iterations:
     // those that need masking on S, and those that don't.
@@ -964,7 +964,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
     }
 
-    if (cute::thread0()) { printf("fence -3\n"); }
+    //if (cute::thread0()) { printf("fence -3\n"); }
 
     // These are the iterations where we don't need masking on S
     for (; n_block >= dst; --n_block) {
@@ -1022,14 +1022,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
     }
     
-    if (cute::thread0()) { printf("fence -2\n"); }
-    __threadfence();
+    //if (cute::thread0()) { printf("fence -2\n"); }
+    /*__threadfence();
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
     __syncthreads();
-    if (m_block == 2 && tidx == 66) 
+    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
     { 
         printf("fragment:\n");
         printf("scores_max:\n");
@@ -1038,7 +1038,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(scores_sum);
         printf("acc_o:\n");
         print(acc_o);
-    }
+    }*/
     // Epilogue
 
     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
@@ -1053,14 +1053,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
-        if (m_block == 2 && tidx == 66) 
+        /*if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
         { 
             printf("scale = %d\n", scale);
-        }
+        }*/
     }
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
-    if (m_block == 2 && tidx == 66) 
+    /*if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
     { 
         printf("acc_o:\n");
         print(acc_o);
@@ -1070,7 +1070,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
-    __syncthreads();
+    __syncthreads();*/
     // Convert acc_o from fp32 to fp16/bf16
     Tensor rO = flash::convert_type<Element>(acc_o);
     //Bae: O in shared memory replace Q!!
@@ -1154,7 +1154,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //if (cute::thread0()) { printf("fence 1\n"); }
 
-    if (m_block == 2 && tidx == 66) 
+    /*if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
     { 
         printf("gscores_max:\n");
         print(gscores_max);
@@ -1169,7 +1169,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
-    __syncthreads();    
+    __syncthreads();  */  
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1402,13 +1402,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
     } 
-    __threadfence();
+    /*__threadfence();
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
     __syncthreads();
-    /*if (cute::thread0()) 
+    if (cute::thread0()) 
     { 
         printf("fragment:\n");
         printf("scores_max:\n");
@@ -1428,14 +1428,15 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     and the whole grid maybe not on the device simultaneously because it is too large.
     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
+    
     __threadfence();
-    atomicAnd(&CompleteMask, 0);
+    /*atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
     }
-    __syncthreads();
+    __syncthreads();*/
 
-    if (cute::thread0()) { printf("fence 3\n"); }
+    //if (cute::thread0()) { printf("fence 3\n"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1509,7 +1510,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //if (cute::thread0()) { printf("fence 6\n"); }
 
         cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 6.6\n");
             printf("tOgOf:\n");
@@ -1522,7 +1523,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(taccOsOf);
             printf("taccOrOf:\n");
             print(taccOrOf);
-        }
+        }*/
         //Bae: We need to store and load score_max and score_sum. So new memory should be assign to score_max and score_sum.
         //     For each block, the size is KblockM * 1.
 
@@ -1535,21 +1536,21 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
         taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
         //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
-        if (m_block == 0 && tidx == 66) {
+        /*if (m_block == 0 && tidx == 66) {
             printf("get<1>(taccOcO_row(0))=%d\n", get<1>(taccOcO_row(0)));
             printf("size(taccOcO_row(0))=%d\n", size(taccOcO_row(0)));
             printf("rank(taccOcO_row(0))=%d\n", rank(taccOcO_row(0)));
             printf("size(taccOcO_row)=%d\n", size(taccOcO_row));
             printf("rank(taccOcO_row)=%d\n", rank(taccOcO_row));
             //print(taccOcO_row);
-        }
+        }*/
         //if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
                 const int row = get<0>(taccOcO_row(mi));
-                if (tidx == 66) { 
+                /*if (tidx == 66) { 
                     printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row, mi);
-                }
+                }*/
                 if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
                     fragment_scores_max(mi) = gscores_max(row); 
                     fragment_scores_sum(mi) = gscores_sum(row); 
@@ -1559,7 +1560,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 7\n");
             printf("scores_max:\n");
@@ -1574,10 +1575,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(fragment_scores_sum);
             printf("rOf:\n");
             print(rOf);
-        }
+        }*/
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
 
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 7.5 merge result\n");
             printf("scores_max:\n");
@@ -1586,7 +1587,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(scores_sum);
             printf("rOf:\n");
             print(rOf);         
-        }
+        }*/
 
         //Bae: Re-compute LSE
 
@@ -1656,7 +1657,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         flash::copy<false, Is_even_K, false, false>(
             gmem_tiled_copy_O, tOrOf_store, tOgOf_store, tOcOf_store, tOpOf_store, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 9.9\n");
             printf("tOgOf_store:\n");
@@ -1669,7 +1670,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(taccOrOf_store);
             printf("taccOsOf_store:\n");
             print(taccOsOf_store);
-        }
+        }*/
     }
     /**/
 }
