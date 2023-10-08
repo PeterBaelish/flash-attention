@@ -1532,7 +1532,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
         if (m_block == 0 && tidx == 66) {
             printf("get<1>(taccOcO_row(0))=%d\n", get<1>(taccOcO_row(0)));
-            print(taccOcO_row);
+            //print(taccOcO_row);
         }
         //if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
