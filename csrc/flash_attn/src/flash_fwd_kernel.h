@@ -1524,13 +1524,17 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         Tensor fragment_scores_max = make_tensor<ElementAccum>(Shape<Int<2 * size<1>(acc_o)>>{});
         Tensor fragment_scores_sum = make_fragment_like(fragment_scores_max);
 
-        //Tensor caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
-        //Tensor taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
+        caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
+        taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
         //static_assert(decltype(size<0>(taccOcO))::value == 4);
         // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
-        //Tensor taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
+        taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
         //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
-        if (get<1>(taccOcO_row(0)) == 0) {
+        if (m_block == 0 && tidx == 66) {
+            printf("get<1>(taccOcO_row(0))=%d\n", get<1>(taccOcO_row(0)));
+            print(taccOcO_row);
+        }
+        //if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
                 const int row = get<0>(taccOcO_row(mi));
@@ -1542,7 +1546,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                     fragment_scores_sum(mi) = gscores_sum(row); 
                 }
             }
-        }
+        //}
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
