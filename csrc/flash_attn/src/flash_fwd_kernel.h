@@ -1055,7 +1055,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
         if (m_block == 2 && tidx == 66) 
         { 
-            printf("scale = %d\n", scale)
+            printf("scale = %d\n", scale);
         }
     }
 
