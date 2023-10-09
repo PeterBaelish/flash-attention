@@ -633,6 +633,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     */
     const auto SollMask = (1 << gridDim.x) - 1;
+    if (blockIdx.x == 0 && tidx == 0) {
+        printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
+   }
 
     //if (cute::thread0()) { printf("fence -7\n"); }
 
@@ -1430,12 +1433,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     
     //__threadfence();
-    atomicAnd(&CompleteMask, 0);
+    //atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask[blockIdx.z][blockIdx.y], 1ULL << blockIdx.x)) != SollMask);
     }
     __syncthreads();
-
+    if (blockIdx.x == 0 && tidx == 0) {
+        printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
+    }
     //if (cute::thread0()) { printf("fence 3\n"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
