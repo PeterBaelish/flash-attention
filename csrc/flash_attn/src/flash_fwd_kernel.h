@@ -634,7 +634,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     */
     const auto SollMask = (1 << gridDim.x) - 1;
     if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
+        //printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
+        CompleteMask[blockIdx.z][blockIdx.y] = 0;
    }
 
     //if (cute::thread0()) { printf("fence -7\n"); }
@@ -1438,9 +1439,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         while ((atomicOr(&CompleteMask[blockIdx.z][blockIdx.y], 1ULL << blockIdx.x)) != SollMask);
     }
     __syncthreads();
-    if (blockIdx.x == 0 && tidx == 0) {
+    /*if (blockIdx.x == 0 && tidx == 0) {
         printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
-    }
+    }*/
     //if (cute::thread0()) { printf("fence 3\n"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
