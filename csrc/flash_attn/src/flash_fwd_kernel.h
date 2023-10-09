@@ -605,7 +605,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
 }
 
 //__device__ unsigned long long CompleteMask[100][100];
-/__device__ unsigned long long CompleteMask;
+__device__ unsigned long long CompleteMask;
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn_1rowblock_causal(const Params &params, const int bidb, const int bidh, const int m_block) {
@@ -634,7 +634,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     */
     //const auto SollMask = (1 << gridDim.x) - 1;
-    const auto SollMask = (1 << (gridDim.x + gridDim.y + gridDim.z)) - 1;
+    const auto SollMask = (1 << (gridDim.x * gridDim.y * gridDim.z)) - 1;
     /*if (blockIdx.x == 0 && threadIdx.x == 0) {
         //printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
         CompleteMask[blockIdx.z][blockIdx.y] = 0;
