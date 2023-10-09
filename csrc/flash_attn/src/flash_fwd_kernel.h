@@ -634,7 +634,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     */
     //const auto SollMask = (1 << gridDim.x) - 1;
-    const auto SollMask = (1 << (gridDim.x + gridDim.y + gridDim.z)) - 1
+    const auto SollMask = (1 << (gridDim.x + gridDim.y + gridDim.z)) - 1;
     /*if (blockIdx.x == 0 && threadIdx.x == 0) {
         //printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
         CompleteMask[blockIdx.z][blockIdx.y] = 0;
