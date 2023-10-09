@@ -604,7 +604,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     );
 }
 
-__device__ unsigned long long CompleteMask;
+__device__ unsigned long long CompleteMask[100][100];
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn_1rowblock_causal(const Params &params, const int bidb, const int bidh, const int m_block) {
@@ -632,7 +632,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
-    const auto SollMask = (1 << gridDim.y * gridDim.x * gridDim.z) - 1;
+    const auto SollMask = (1 << gridDim.x) - 1;
 
     //if (cute::thread0()) { printf("fence -7\n"); }
 
@@ -1429,12 +1429,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     
-    __threadfence();
-    /*atomicAnd(&CompleteMask, 0);
+    //__threadfence();
+    atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
-        while ((atomicOr(&CompleteMask, 1ULL << blockIdx.x)) != SollMask);
+        while ((atomicOr(&CompleteMask[blockIdx.z][blockIdx.y], 1ULL << blockIdx.x)) != SollMask);
     }
-    __syncthreads();*/
+    __syncthreads();
 
     //if (cute::thread0()) { printf("fence 3\n"); }
 

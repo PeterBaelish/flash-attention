@@ -74,7 +74,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                     &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                 // printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
-                //printf("yy\n");
+                // printf("yy\n");
                 kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params);
                 C10_CUDA_KERNEL_LAUNCH_CHECK();  
                 //printf("yyy\n");
