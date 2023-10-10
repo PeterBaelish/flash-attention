@@ -1328,11 +1328,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
             flash::cp_async_wait<0>();
             __syncthreads();
-            if (n_block < n_block_max - 1) {
+            if (n_block > 0) {
                 // Advance gK
                 tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
-                flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
-            } else {
                 flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             }
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
