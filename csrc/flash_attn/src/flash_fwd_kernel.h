@@ -1332,10 +1332,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 // Advance gK
                 tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
                 flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
+                cute::cp_async_fence();
             }
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
-            // isn't right and we get race conditions.
-            cute::cp_async_fence();
+            // isn't right and we get race conditions.    
 
             //if (cute::thread0()) { printf("fence 1.82\n"); }
             // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
