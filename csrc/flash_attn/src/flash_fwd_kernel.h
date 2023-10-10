@@ -1035,7 +1035,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
     }
     __syncthreads();
-    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
+    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
     { 
         printf("fragment:\n");
         printf("scores_max:\n");
@@ -1059,14 +1059,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
-        if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
+        if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
         { 
             printf("scale = %d\n", scale);
         }
     }
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
-    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
+    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
     { 
         printf("acc_o:\n");
         print(acc_o);
@@ -1160,7 +1160,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //if (cute::thread0()) { printf("fence 1\n"); }
 
-    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) && tidx == 66) 
+    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
     { 
         printf("gscores_max:\n");
         print(gscores_max);
