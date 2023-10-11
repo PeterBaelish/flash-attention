@@ -740,7 +740,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //Bae: acc_o size is (4, B_r/2, Headdim/2)
     Tensor acc_o = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kHeadDim>>{});  // MMA, MMA_M, MMA_K
     //Bae: acc_s size is (4, B_r/2, B_c/2)
-    Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
+    //Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
     
     //
     // Copy Atom retiling
@@ -884,6 +884,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     constexpr int n_masking_steps = cute::ceil_div(kBlockM, kBlockN); //Bae: this is for the last causal block
     #pragma unroll
     for (int masking_step = 0; masking_step < n_masking_steps; ++masking_step, --n_block) {
+        Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});
         clear(acc_s);
         flash::cp_async_wait<0>();
         __syncthreads();
@@ -970,6 +971,22 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
         // if (cute::thread0()) { print(tOrP); }
 
+        __threadfence();
+        atomicAnd(&CompleteMask, 0);
+        if (tidx == 0) {
+            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
+        }
+        __syncthreads();
+        if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
+        { 
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("scores:\n");
+            print(scores);
+        }
+
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
         // if (cute::thread0()) { print(scores); }
 
@@ -984,7 +1001,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     // These are the iterations where we don't need masking on S
     for (; n_block >= dst; --n_block) {
-        //Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
+        Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
         clear(acc_s);
         flash::cp_async_wait<0>();
         __syncthreads();
@@ -1034,7 +1051,21 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
                                  block_row_idx, block_col_idx, kNWarps);
         }
-
+        __threadfence();
+        atomicAnd(&CompleteMask, 0);
+        if (tidx == 0) {
+            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
+        }
+        __syncthreads();
+        if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
+        { 
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("scores:\n");
+            print(scores);
+        }
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
     }
     
@@ -1313,7 +1344,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //if (cute::thread0()) { printf("fence 1.8\n"); }
 
         for (; n_block >= 0; --n_block) {
-            //Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
+            Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
             clear(acc_s);
             flash::cp_async_wait<0>();
             __syncthreads();
