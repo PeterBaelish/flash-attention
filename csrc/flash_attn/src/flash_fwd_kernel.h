@@ -122,15 +122,19 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
         float scores_scale = (scores_sum_2(mi) / scores_sum_1(mi))
                              * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E);
         scores_scale = 1.0 / (1.0 + scores_scale);
-        if(block_id == 0 && tidx == 66)
-            printf("scores_scale = %f\n", scores_scale);
+        if(block_id == 0 && tidx == 66) {
+            printf("scores_sum_2(mi) = %f, scores_sum_1(mi) = %f, scores_max_2(mi) = %f, scores_max_1(mi) = %f, scores_scale = %f\n", scores_sum_2(mi), scores_sum_1(mi)
+                             scores_max_2(mi), scores_max_1(mi), scores_scale);
+            printf("k = %f\n", (scores_sum_2(mi) / scores_sum_1(mi)) * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E));
+            printf("s-m = %f\n", exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E));
+        }
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
             if(block_id == 0 && tidx == 66)
                 printf("acc_o_1_rowcol(mi, ni) = %f, acc_o_2_rowcol(mi, ni) = %f\n", acc_o_1_rowcol(mi, ni), acc_o_2_rowcol(mi, ni));
             acc_o_2_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1.0 - scores_scale);
             if(block_id == 0 && tidx == 66)
-                printf("merged acc_o_1_rowcol(mi, ni) = %f\n", acc_o_1_rowcol(mi, ni));
+                printf("merged acc_o_1_rowcol(mi, ni) = %f\n", acc_o_2_rowcol(mi, ni));
         }
     }
     //We also need to compute and store l,m for LSE
