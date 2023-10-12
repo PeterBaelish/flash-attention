@@ -1367,6 +1367,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 print(scores_sum);
                 printf("scores:\n");
                 print(scores);
+                n_block == n_block_max - 1
+                    ? printf("1\n")
+                    : printf("0\n");
             }
 
             Tensor rP = flash::convert_type<Element>(scores);
