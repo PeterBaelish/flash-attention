@@ -971,22 +971,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
         // if (cute::thread0()) { print(tOrP); }
 
-        __threadfence();
-        atomicAnd(&CompleteMask, 0);
-        if (tidx == 0) {
-            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
-        }
-        __syncthreads();
-        if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
-        { 
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("scores:\n");
-            print(scores);
-        }
-
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
         // if (cute::thread0()) { print(scores); }
 
@@ -1051,21 +1035,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
                                  block_row_idx, block_col_idx, kNWarps);
         }
-        __threadfence();
-        atomicAnd(&CompleteMask, 0);
-        if (tidx == 0) {
-            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
-        }
-        __syncthreads();
-        if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
-        { 
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("scores:\n");
-            print(scores);
-        }
         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
     }
     
@@ -1102,7 +1071,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
         if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
         { 
-            printf("scale = %d\n", scale);
+            printf("scale = %f\n", scale);
         }
     }
 
@@ -1385,6 +1354,16 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             n_block == n_block_max - 1
                 ? softmax_rescale_o<true, false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
                 : softmax_rescale_o<false, false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+
+            if (m_block == 0 && tidx == 66) 
+            { 
+                printf("scores_max:\n");
+                print(scores_max);
+                printf("scores_sum:\n");
+                print(scores_sum);
+                printf("scores:\n");
+                print(scores);
+            }
 
             Tensor rP = flash::convert_type<Element>(scores);
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
