@@ -137,7 +137,8 @@ inline __device__ void softmax_rescale_o(Tensor0 &scores, Tensor1 &scores_max, T
 template<bool Check_inf=false, typename Tensor1, typename Tensor2>
 inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_sum_1,
                                        Tensor1 &scores_max_2, Tensor1 &scores_sum_2,
-                                       Tensor2 &acc_o_1, Tensor2 &acc_o_2) {
+                                       Tensor2 &acc_o_1, Tensor2 &acc_o_2, 
+                                       float softmax_scale_log2) {
     int tidx = threadIdx.x;
     int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
     
@@ -150,13 +151,13 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
         // k = l(2)/l(1) * e^(m(2)-m(1))
         scores_max(mi) = scores_max_2(mi) > scores_max_1(mi) ? scores_max_2(mi) : scores_max_1(mi);
         float scores_scale = (scores_sum_2(mi) / scores_sum_1(mi))
-                             * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E);
+                             * exp2f((scores_max_2(mi) - scores_max_1(mi)) * softmax_scale_log2);
         scores_scale = 1.0 / (1.0 + scores_scale);
         if(block_id == 0 && tidx == 66) {
             printf("scores_sum_2(mi) = %f, scores_sum_1(mi) = %f, scores_max_2(mi) = %f, scores_max_1(mi) = %f, scores_scale = %f\n", scores_sum_2(mi), scores_sum_1(mi), 
                 scores_max_2(mi), scores_max_1(mi), scores_scale);
-            printf("k = %f\n", (scores_sum_2(mi) / scores_sum_1(mi)) * exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E));
-            printf("s-m = %f\n", exp2f((scores_max_2(mi) - scores_max_1(mi)) * M_LOG2E));
+            printf("k = %f\n", (scores_sum_2(mi) / scores_sum_1(mi)) * exp2f((scores_max_2(mi) - scores_max_1(mi)) * softmax_scale_log2));
+            printf("s-m = %f\n", exp2f((scores_max_2(mi) - scores_max_1(mi)) * softmax_scale_log2));
         }
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
@@ -170,8 +171,8 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
     //We also need to compute and store l,m for LSE
     #pragma unroll
     for (int mi = 0; mi < size(scores_sum_1); ++mi) {
-        scores_sum_1(mi) = scores_sum_1(mi) * exp2f((scores_max_1(mi) - scores_max(mi)) * M_LOG2E) 
-                            + scores_sum_2(mi) * exp2f((scores_max_2(mi) - scores_max(mi)) * M_LOG2E); 
+        scores_sum_1(mi) = scores_sum_1(mi) * exp2f((scores_max_1(mi) - scores_max(mi)) * softmax_scale_log2) 
+                            + scores_sum_2(mi) * exp2f((scores_max_2(mi) - scores_max(mi)) * softmax_scale_log2); 
         scores_max_1(mi) = scores_max(mi);
     }
 };
@@ -1674,7 +1675,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             printf("rOf:\n");
             print(rOf);
         }
-        softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf);
+        softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf, params.scale_softmax_log2);
 
         if (m_block == 0 && tidx == 66) 
         { 
