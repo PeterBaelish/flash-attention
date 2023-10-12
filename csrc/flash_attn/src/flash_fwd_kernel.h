@@ -1239,17 +1239,31 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //sVtNoSwizzle = make_tensor(sV.data(), typename Kernel_traits::SmemLayoutVtransposedNoSwizzle{});
 
         tQgQ = gmem_thr_copy_QKV.partition_S(gQ);
-        //tQsQ = gmem_thr_copy_QKV.partition_D(sQ);
+        tQsQ = gmem_thr_copy_QKV.partition_D(sQ);
         tKgK = gmem_thr_copy_QKV.partition_S(gK);  // (KCPY, KCPY_N, KCPY_K)
-        //tKsK = gmem_thr_copy_QKV.partition_D(sK);
+        tKsK = gmem_thr_copy_QKV.partition_D(sK);
         tVgV = gmem_thr_copy_QKV.partition_S(gV);  // (VCPY, VCPY_N, VCPY_K)
-        //tVsV = gmem_thr_copy_QKV.partition_D(sV);
+        tVsV = gmem_thr_copy_QKV.partition_D(sV);
         tPgP = gmem_thr_copy_P.partition_D(gP);
 
-        //tSrQ  = thr_mma.partition_fragment_A(sQ);                           // (MMA,MMA_M,MMA_K)
-        //tSrK  = thr_mma.partition_fragment_B(sK);                           // (MMA,MMA_N,MMA_K)
-        //tOrVt  = thr_mma.partition_fragment_B(sVtNoSwizzle);                // (MMA, MMA_K,MMA_N)
+        tSrQ  = thr_mma.partition_fragment_A(sQ);                           // (MMA,MMA_M,MMA_K)
+        tSrK  = thr_mma.partition_fragment_B(sK);                           // (MMA,MMA_N,MMA_K)
+        tOrVt  = thr_mma.partition_fragment_B(sVtNoSwizzle);                // (MMA, MMA_K,MMA_N)
 
+        //auto smem_tiled_copy_Q = make_tiled_copy_A(typename Kernel_traits::SmemCopyAtom{}, tiled_mma);
+        //auto smem_thr_copy_Q = smem_tiled_copy_Q.get_thread_slice(tidx);
+        // auto smem_thr_copy_Q = make_tiled_copy_A_warpcontiguousM<MMA_M>(typename Kernel_traits::SmemCopyAtom{}, tiled_mma).get_thread_slice(tidx);
+        // if (cute::thread0()) {smem_thr_copy_Q.print_all();}
+        tSsQ = smem_thr_copy_Q.partition_S(sQ);
+        // if (cute::thread0()) {print(tSsQ.layout()); printf("\n");}
+
+        //auto smem_tiled_copy_K = make_tiled_copy_B(typename Kernel_traits::SmemCopyAtom{}, tiled_mma);
+        //auto smem_thr_copy_K = smem_tiled_copy_K.get_thread_slice(tidx);
+        tSsK = smem_thr_copy_K.partition_S(sK);
+
+        //auto smem_tiled_copy_V = make_tiled_copy_B(typename Kernel_traits::SmemCopyAtomTransposed{}, tiled_mma);
+        //auto smem_thr_copy_V = smem_tiled_copy_V.get_thread_slice(tidx);
+        tOsVt = smem_thr_copy_V.partition_S(sVt);
         //Bae: acc_o size is (4, B_r/2, Headdim/2)
         //Tensor acc_o = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kHeadDim>>{});  // MMA, MMA_M, MMA_K
 
@@ -1339,6 +1353,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             { 
                 printf("tKgK:\n");
                 print(tKgK);
+                printf("tSrQ:\n");
+                print(tSrQ);
+                printf("tSrK:\n");
+                print(tSrK);
+                printf("tSsQ:\n");
+                print(tSsQ);
+                printf("tSsK:\n");
+                print(tSsK);
             }
             flash::cp_async_wait<0>();
             __syncthreads();
