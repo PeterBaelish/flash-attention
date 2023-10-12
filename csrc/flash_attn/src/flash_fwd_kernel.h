@@ -1039,7 +1039,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
     
     //if (cute::thread0()) { printf("fence -2\n"); }
-    __threadfence();
+    /*__threadfence();
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
@@ -1054,7 +1054,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(scores_sum);
         printf("acc_o:\n");
         print(acc_o);
-    }
+    }*/
     // Epilogue
 
     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
@@ -1069,14 +1069,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
-        if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
+        /*if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
         { 
             printf("scale = %f\n", scale);
-        }
+        }*/
     }
 
     // if (cute::thread0()) { print(acc_o_rowcol); }
-    if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
+    /*if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
     { 
         printf("acc_o:\n");
         print(acc_o);
@@ -1086,7 +1086,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
     }
-    __syncthreads();
+    __syncthreads();*/
     // Convert acc_o from fp32 to fp16/bf16
     Tensor rO = flash::convert_type<Element>(acc_o);
     //Bae: O in shared memory replace Q!!
@@ -1169,7 +1169,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     );
 
     //if (cute::thread0()) { printf("fence 1\n"); }
-
+    /*
     if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
     { 
         printf("gscores_max:\n");
@@ -1185,7 +1185,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
     }
-    __syncthreads();    
+    __syncthreads();    */
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1335,7 +1335,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
                 smem_thr_copy_Q, smem_thr_copy_K
             );
-
+            if (m_block == 0 && tidx == 66) 
+            { 
+                printf("tKgK:\n");
+                print(tKgK);
+            }
             flash::cp_async_wait<0>();
             __syncthreads();
             if (n_block > 0) {
@@ -1426,6 +1430,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
     } 
+    /*
     __threadfence();
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
@@ -1441,7 +1446,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         print(scores_sum);
         printf("acc_o:\n");
         print(acc_o);
-    }
+    }*/
 
     //if (cute::thread0()) { printf("fence 2\n"); }
 
