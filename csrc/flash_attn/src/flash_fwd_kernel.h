@@ -71,10 +71,40 @@ make_tiled_copy_C_warpcontiguousM(Copy_Atom<Args...> const& copy_atom,
 template<bool Is_first, bool Check_inf=false, typename Tensor0, typename Tensor1, typename Tensor2>
 inline __device__ void softmax_rescale_o(Tensor0 &scores, Tensor1 &scores_max, Tensor1 &scores_sum,
                                          Tensor2 &acc_o, float softmax_scale_log2) {
+    int tidx = threadIdx.x;
+    int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
+    
     if (Is_first) {
         flash::template reduce_max</*zero_init=*/true>(scores, scores_max);
+        if(block_id == 0 && tidx == 66) {
+            printf("softmax:\n");
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("scores:\n");
+            print(scores);
+        }
         flash::scale_apply_exp2(scores, scores_max, softmax_scale_log2);
+        if(block_id == 0 && tidx == 66) {
+            printf("softmax:\n");
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("scores:\n");
+            print(scores);
+        }
         flash::reduce_sum(scores, scores_sum);
+        if(block_id == 0 && tidx == 66) {
+            printf("softmax:\n");
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("scores:\n");
+            print(scores);
+        }
     } else {
         Tensor scores_max_prev = make_fragment_like(scores_max);
         cute::copy(scores_max, scores_max_prev);
@@ -1387,8 +1417,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             }
 
             n_block == n_block_max - 1
-                ? softmax_rescale_o<true, false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
-                : softmax_rescale_o<false, false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+                ? softmax_rescale_o<true>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
+                : softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
             if (m_block == 0 && tidx == 66) 
             { 
