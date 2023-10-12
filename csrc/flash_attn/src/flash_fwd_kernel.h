@@ -70,41 +70,11 @@ make_tiled_copy_C_warpcontiguousM(Copy_Atom<Args...> const& copy_atom,
 
 template<bool Is_first, bool Check_inf=false, typename Tensor0, typename Tensor1, typename Tensor2>
 inline __device__ void softmax_rescale_o(Tensor0 &scores, Tensor1 &scores_max, Tensor1 &scores_sum,
-                                         Tensor2 &acc_o, float softmax_scale_log2) {
-    int tidx = threadIdx.x;
-    int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
-    
+                                         Tensor2 &acc_o, float softmax_scale_log2) { 
     if (Is_first) {
         flash::template reduce_max</*zero_init=*/true>(scores, scores_max);
-        if(block_id == 0 && tidx == 66) {
-            printf("softmax:\n");
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("scores:\n");
-            print(scores);
-        }
         flash::scale_apply_exp2(scores, scores_max, softmax_scale_log2);
-        if(block_id == 0 && tidx == 66) {
-            printf("softmax:\n");
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("scores:\n");
-            print(scores);
-        }
         flash::reduce_sum(scores, scores_sum);
-        if(block_id == 0 && tidx == 66) {
-            printf("softmax:\n");
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("scores:\n");
-            print(scores);
-        }
     } else {
         Tensor scores_max_prev = make_fragment_like(scores_max);
         cute::copy(scores_max, scores_max_prev);
@@ -139,8 +109,8 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
                                        Tensor1 &scores_max_2, Tensor1 &scores_sum_2,
                                        Tensor2 &acc_o_1, Tensor2 &acc_o_2, 
                                        float softmax_scale_log2) {
-    int tidx = threadIdx.x;
-    int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
+    //int tidx = threadIdx.x;
+    //int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
     
     Tensor scores_max = make_fragment_like(scores_max_1);
     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
@@ -153,19 +123,19 @@ inline __device__ void softmax_merge_o(Tensor1 &scores_max_1, Tensor1 &scores_su
         float scores_scale = (scores_sum_2(mi) / scores_sum_1(mi))
                              * exp2f((scores_max_2(mi) - scores_max_1(mi)) * softmax_scale_log2);
         scores_scale = 1.0 / (1.0 + scores_scale);
-        if(block_id == 0 && tidx == 66) {
+        /*if(block_id == 0 && tidx == 66) {
             printf("scores_sum_2(mi) = %f, scores_sum_1(mi) = %f, scores_max_2(mi) = %f, scores_max_1(mi) = %f, scores_scale = %f\n", scores_sum_2(mi), scores_sum_1(mi), 
                 scores_max_2(mi), scores_max_1(mi), scores_scale);
             printf("k = %f\n", (scores_sum_2(mi) / scores_sum_1(mi)) * exp2f((scores_max_2(mi) - scores_max_1(mi)) * softmax_scale_log2));
             printf("s-m = %f\n", exp2f((scores_max_2(mi) - scores_max_1(mi)) * softmax_scale_log2));
-        }
+        }*/
         #pragma unroll
         for (int ni = 0; ni < size<1>(acc_o_1_rowcol); ++ni) {
-            if(block_id == 0 && tidx == 66)
-                printf("acc_o_1_rowcol(mi, ni) = %f, acc_o_2_rowcol(mi, ni) = %f\n", acc_o_1_rowcol(mi, ni), acc_o_2_rowcol(mi, ni));
+            /*if(block_id == 0 && tidx == 66)
+                printf("acc_o_1_rowcol(mi, ni) = %f, acc_o_2_rowcol(mi, ni) = %f\n", acc_o_1_rowcol(mi, ni), acc_o_2_rowcol(mi, ni));*/
             acc_o_2_rowcol(mi, ni) = acc_o_1_rowcol(mi, ni) * scores_scale + acc_o_2_rowcol(mi, ni) * (1.0 - scores_scale);
-            if(block_id == 0 && tidx == 66)
-                printf("merged acc_o_2_rowcol(mi, ni) = %f\n", acc_o_2_rowcol(mi, ni));
+            /*if(block_id == 0 && tidx == 66)
+                printf("merged acc_o_2_rowcol(mi, ni) = %f\n", acc_o_2_rowcol(mi, ni));*/
         }
     }
     //We also need to compute and store l,m for LSE
@@ -1380,19 +1350,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
                 smem_thr_copy_Q, smem_thr_copy_K
             );
-            if (m_block == 0 && tidx == 66) 
-            { 
-                printf("tKgK:\n");
-                print(tKgK);
-                printf("tSrQ:\n");
-                print(tSrQ);
-                printf("tSrK:\n");
-                print(tSrK);
-                printf("tSsQ:\n");
-                print(tSsQ);
-                printf("tSsK:\n");
-                print(tSsK);
-            }
             flash::cp_async_wait<0>();
             __syncthreads();
             if (n_block > 0) {
@@ -1408,31 +1365,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
 
-            if (m_block == 0 && tidx == 66) 
-            { 
-                printf("scores:\n");
-                print(scores);
-                n_block == n_block_max - 1
-                    ? printf("1\n")
-                    : printf("0\n");
-            }
-
             n_block == n_block_max - 1
                 ? softmax_rescale_o<true>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
                 : softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
-
-            if (m_block == 0 && tidx == 66) 
-            { 
-                printf("scores_max:\n");
-                print(scores_max);
-                printf("scores_sum:\n");
-                print(scores_sum);
-                printf("scores:\n");
-                print(scores);
-                n_block == n_block_max - 1
-                    ? printf("1\n")
-                    : printf("0\n");
-            }
 
             Tensor rP = flash::convert_type<Element>(scores);
             // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
@@ -1523,18 +1458,18 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
     
-    //__threadfence();
+    __threadfence();
     //atomicAnd(&CompleteMask, 0);
     /*if (tidx == 0) {
         while ((atomicOr(&CompleteMask[blockIdx.z][blockIdx.y], 1ULL << blockIdx.x)) != SollMask);
     }
     __syncthreads();*/
-    __threadfence();
+    /*__threadfence();
     atomicAnd(&CompleteMask, 0);
     if (tidx == 0) {
         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
     }
-    __syncthreads();
+    __syncthreads();*/
     //if (cute::thread0()) { printf("fence 3\n"); }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1609,7 +1544,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //if (cute::thread0()) { printf("fence 6\n"); }
 
         cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 6.6\n");
             printf("tOgOf:\n");
@@ -1622,7 +1557,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(taccOsOf);
             printf("taccOrOf:\n");
             print(taccOrOf);
-        }
+        }*/
         //Bae: We need to store and load score_max and score_sum. So new memory should be assign to score_max and score_sum.
         //     For each block, the size is KblockM * 1.
 
@@ -1635,14 +1570,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
         taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
         //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
-        if (m_block == 0 && tidx == 66) {
+        /*if (m_block == 0 && tidx == 66) {
             printf("get<1>(taccOcO_row(0))=%d\n", get<1>(taccOcO_row(0)));
             printf("size(taccOcO_row(0))=%d\n", size(taccOcO_row(0)));
             printf("rank(taccOcO_row(0))=%d\n", rank(taccOcO_row(0)));
             printf("size(taccOcO_row)=%d\n", size(taccOcO_row));
             printf("rank(taccOcO_row)=%d\n", rank(taccOcO_row));
             //print(taccOcO_row);
-        }
+        }*/
         //if (get<1>(taccOcO_row(0)) == 0) {
             #pragma unroll
             for (int mi = 0; mi < size(lse); ++mi) {
@@ -1659,7 +1594,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 7\n");
             printf("scores_max:\n");
@@ -1674,10 +1609,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(fragment_scores_sum);
             printf("rOf:\n");
             print(rOf);
-        }
+        }*/
         softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf, params.scale_softmax_log2);
 
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 7.5 merge result\n");
             printf("scores_max:\n");
@@ -1686,7 +1621,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(scores_sum);
             printf("rOf:\n");
             print(rOf);         
-        }
+        }*/
 
         //Bae: Re-compute LSE
 
@@ -1756,7 +1691,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         flash::copy<false, Is_even_K, false, false>(
             gmem_tiled_copy_O, tOrOf_store, tOgOf_store, tOcOf_store, tOpOf_store, binfo.actual_seqlen_q - reverse_m_block * kBlockM
         );
-        if (m_block == 0 && tidx == 66) 
+        /*if (m_block == 0 && tidx == 66) 
         { 
             printf("fence 9.9\n");
             printf("tOgOf_store:\n");
@@ -1769,7 +1704,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(taccOrOf_store);
             printf("taccOsOf_store:\n");
             print(taccOsOf_store);
-        }
+        }*/
     }
     /**/
 }
