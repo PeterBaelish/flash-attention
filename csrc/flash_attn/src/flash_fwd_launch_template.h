@@ -46,24 +46,9 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     BOOL_SWITCH(is_even_N, IsEvenNConst, [&] {
         BOOL_SWITCH(is_even_K, IsEvenKConst, [&] {
             BOOL_SWITCH(return_softmax, ReturnSoftmaxConst, [&] {
-                // TODO: profiling and test accuracy
-                // how? profling is easy, but accuracy is not easy because our kernels are processing sequencially
-                // The only method to test accuracy is create a new API
-                // We can test accuarcy FIRST!                
-                
                 // Will only return softmax if dropout, to reduce compilation time.
                 /* auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
-                // auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, true, ReturnSoftmaxConst && Is_dropout>;
-                if (smem_size >= 48 * 1024) {
-                    C10_CUDA_CHECK(cudaFuncSetAttribute(
-                        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
-                }
-                int ctas_per_sm;
-                cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-                    &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
-                // printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
-                kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params); 
-                C10_CUDA_KERNEL_LAUNCH_CHECK();*/
+                // auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, true, ReturnSoftmaxConst && Is_dropout>;*/
 
                 auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
                 if (smem_size >= 48 * 1024) {
@@ -124,7 +109,8 @@ void run_mha_fwd_hdim96(Flash_fwd_params &params, cudaStream_t stream) {
         BOOL_SWITCH(params.is_causal, Is_causal, [&] {
             // For sm86 or sm89, 64 x 64 is the fastest for causal (because it's square),
             if (is_sm8x) {
-                if constexpr(!Is_causal) {
+                //if constexpr(!Is_causal) {
+                if (0){
                     run_flash_fwd<Flash_fwd_kernel_traits<Headdim, 128, 64, 4, false, false, T>, Is_dropout, Is_causal>(params, stream);
                 } else {
                     run_flash_fwd<Flash_fwd_kernel_traits<Headdim, 64, 64, 4, false, false, T>, Is_dropout, Is_causal>(params, stream);
@@ -152,7 +138,8 @@ void run_mha_fwd_hdim128(Flash_fwd_params &params, cudaStream_t stream) {
                 // For sm86 or sm89, 64 x 64 is the fastest for causal (because it's square),
                 // and 128 x 32 (48 KB smem) is the fastest for non-causal since we get 2 CTAs per SM.
                 if (is_sm8x) {
-                    if constexpr(!Is_causal) {
+                    //if constexpr(!Is_causal) {
+                    if (0){
                         run_flash_fwd<Flash_fwd_kernel_traits<Headdim, 128, 32, 4, false, false, T>, Is_dropout, Is_causal>(params, stream);
                     } else {
                         run_flash_fwd<Flash_fwd_kernel_traits<Headdim, 64, 64, 4, false, false, T>, Is_dropout, Is_causal>(params, stream);
@@ -189,7 +176,8 @@ void run_mha_fwd_hdim160(Flash_fwd_params &params, cudaStream_t stream) {
             // For sm86 or sm89, 64 x 64 is the fastest for causal (because it's square),
             // and 128 x 64 with 8 warps is the fastest for non-causal.
             if (is_sm8x) {
-                if constexpr(!Is_causal) {
+                //if constexpr(!Is_causal) {
+                if (0){
                     run_flash_fwd<Flash_fwd_kernel_traits<Headdim, 128, 64, 8, false, false, T>, Is_dropout, Is_causal>(params, stream);
                 } else {
                     run_flash_fwd<Flash_fwd_kernel_traits<Headdim, 64, 64, 4, false, false, T>, Is_dropout, Is_causal>(params, stream);
