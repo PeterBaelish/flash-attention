@@ -1172,7 +1172,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     __syncthreads();
     if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && tidx == 0)
-        atomicOr(CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 1);
+        atomicOr(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 1);
 
     //if (cute::thread0()) { printf("fence 1\n"); }
     /*
