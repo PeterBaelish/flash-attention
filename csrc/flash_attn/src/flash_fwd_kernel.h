@@ -615,8 +615,8 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     );
 }
 
-__device__ unsigned long long CompleteMask[100][100];
-//__device__ unsigned long long CompleteMask;
+__device__ int CompleteMask[64][64][64];
+//__device__ int CompleteMask;
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn_1rowblock_causal(const Params &params, const int bidb, const int bidh, const int m_block) {
@@ -644,13 +644,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
-    const auto SollMask = (1 << gridDim.x) - 1;
+    //const auto SollMask = (1 << gridDim.x) - 1;
     //const auto SollMask = (1 << (gridDim.x * gridDim.y * gridDim.z)) - 1;
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
+    if (threadIdx.x == 0) {
         //printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
-        CompleteMask[blockIdx.z][blockIdx.y] = 0;
+        CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x] = 0;
     }
-    __syncthreads();
+    //__syncthreads();
 
     //if (cute::thread0()) { printf("fence -7\n"); }
 
@@ -1170,6 +1170,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - m_block * kBlockM
     );
 
+    __syncthreads();
+    if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && tidx == 0)
+        CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x] = 1;
+
     //if (cute::thread0()) { printf("fence 1\n"); }
     /*
     if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
@@ -1429,57 +1433,55 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             #pragma unroll
             for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
         }
+        /*
+        __threadfence();
+        atomicAnd(&CompleteMask, 0);
+        if (tidx == 0) {
+            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
+        }
+        __syncthreads();
+        if (m_block == 0 && tidx == 66) 
+        { 
+            printf("fragment:\n");
+            printf("scores_max:\n");
+            print(scores_max);
+            printf("scores_sum:\n");
+            print(scores_sum);
+            printf("acc_o:\n");
+            print(acc_o);
+        }*/
 
-    } 
-    /*
-    __threadfence();
-    atomicAnd(&CompleteMask, 0);
-    if (tidx == 0) {
-        while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
-    }
-    __syncthreads();
-    if (m_block == 0 && tidx == 66) 
-    { 
-        printf("fragment:\n");
-        printf("scores_max:\n");
-        print(scores_max);
-        printf("scores_sum:\n");
-        print(scores_sum);
-        printf("acc_o:\n");
-        print(acc_o);
-    }*/
+        //if (cute::thread0()) { printf("fence 2\n"); }
 
-    //if (cute::thread0()) { printf("fence 2\n"); }
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //Bae: we should sync for the whole token. In flash attention, one block is assigned to one SM. So the sync range is a few block in a few SMs.
+        //     __threadfence() sync for grid level. Maybe it is too wide because it will wait all the blocks, 
+        //     and the whole grid maybe not on the device simultaneously because it is too large.
+        //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
+        //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
+        
+        //__threadfence();
+        //atomicAnd(&CompleteMask, 0);
 
-    //Bae: we should sync for the whole token. In flash attention, one block is assigned to one SM. So the sync range is a few block in a few SMs.
-    //     __threadfence() sync for grid level. Maybe it is too wide because it will wait all the blocks, 
-    //     and the whole grid maybe not on the device simultaneously because it is too large.
-    //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
-    //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
-    
-    //__threadfence();
-    //atomicAnd(&CompleteMask, 0);
-    if (tidx == 0) {
-        while ((atomicOr(&CompleteMask[blockIdx.z][blockIdx.y], 1ULL << blockIdx.x)) != SollMask);
-    }
-    __syncthreads();
-    /*__threadfence();
-    atomicAnd(&CompleteMask, 0);
-    if (tidx == 0) {
-        while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
-    }
-    __syncthreads();*/
-    //if (cute::thread0()) { printf("fence 3\n"); }
+        if (m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2 && tidx == 0) {
+            while (CompleteMask[blockIdx.z][blockIdx.y][reverse_m_block]);
+        }
+        __syncthreads();
+        /*__threadfence();
+        atomicAnd(&CompleteMask, 0);
+        if (tidx == 0) {
+            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
+        }
+        __syncthreads();*/
+        //if (cute::thread0()) { printf("fence 3\n"); }
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    //Bae: Then we should merge two fragments when m_block < N/2, fragment 1 to d/2-f(m_block) stored at shared memory, 
-    //     d/2-f(m_block) to d-f(m_block) stored at global memory. Fragment in glb memmory will be load to shared memmory, 
-    //     after merging the result will be load to global memory (the same place as where stored fragment). 
-    if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2) {
-           
+        //Bae: Then we should merge two fragments when m_block < N/2, fragment 1 to d/2-f(m_block) stored at shared memory, 
+        //     d/2-f(m_block) to d-f(m_block) stored at global memory. Fragment in glb memmory will be load to shared memmory, 
+        //     after merging the result will be load to global memory (the same place as where stored fragment). 
+            
         //Bae: fragment 1 to d/2-f(m_block) stored at sO, d/2-f(m_block) to d-f(m_block) stored at global mem somewhere, we need to recompute pointers
         const index_t row_offset_frag_scores_max = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
         const index_t row_offset_frag_scores_sum = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
