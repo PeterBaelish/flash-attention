@@ -644,13 +644,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         copy ptr(N-m_block) row to glb mem
 
     */
-    //const auto SollMask = (1 << gridDim.x) - 1;
-    //const auto SollMask = (1 << (gridDim.x * gridDim.y * gridDim.z)) - 1;
-    if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
-        //printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
-        atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
-    }
-    //__syncthreads();
 
     //if (cute::thread0()) { printf("fence -7\n"); }
 
@@ -671,6 +664,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     constexpr int kHeadDim = Kernel_traits::kHeadDim;
     constexpr int kNWarps = Kernel_traits::kNWarps;
     constexpr int MMA_M = kBlockM / decltype(size<0>(typename Kernel_traits::TiledMma::TiledShape_MNK{}))::value;
+
+    //const auto SollMask = (1 << gridDim.x) - 1;
+    //const auto SollMask = (1 << (gridDim.x * gridDim.y * gridDim.z)) - 1;
+    if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
+        //printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
+        atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
+    }
+    //__syncthreads();
 
     const BlockInfo<!Is_even_N> binfo(params, bidb);
     if (m_block * kBlockM >= binfo.actual_seqlen_q || binfo.actual_seqlen_k == 0) return;
