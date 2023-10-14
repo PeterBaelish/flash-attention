@@ -674,7 +674,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
     }
     //__syncthreads();
-    
+
     if (m_block * kBlockM >= binfo.actual_seqlen_q || binfo.actual_seqlen_k == 0) return;
     
     int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
@@ -1467,7 +1467,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //atomicAnd(&CompleteMask, 0);
 
         if (tidx == 0) {
-            while (CompleteMask[blockIdx.z][blockIdx.y][reverse_m_block]);
+            while(atomicCAS(&CompleteMask[blockIdx.z][blockIdx.y][reverse_m_block], 0, 0) != 1);
         }
         __syncthreads();
         /*__threadfence();
