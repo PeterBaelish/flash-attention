@@ -646,9 +646,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     */
     //const auto SollMask = (1 << gridDim.x) - 1;
     //const auto SollMask = (1 << (gridDim.x * gridDim.y * gridDim.z)) - 1;
-    if (threadIdx.x == 0) {
+    if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
         //printf("(%d, %d)->%lld\n", blockIdx.z, blockIdx.y, CompleteMask[blockIdx.z][blockIdx.y]);
-        CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x] = 0;
+        atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
     }
     //__syncthreads();
 
@@ -1464,7 +1464,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //__threadfence();
         //atomicAnd(&CompleteMask, 0);
 
-        if (m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2 && tidx == 0) {
+        if (tidx == 0) {
             while (CompleteMask[blockIdx.z][blockIdx.y][reverse_m_block]);
         }
         __syncthreads();
