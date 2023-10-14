@@ -665,6 +665,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     constexpr int kNWarps = Kernel_traits::kNWarps;
     constexpr int MMA_M = kBlockM / decltype(size<0>(typename Kernel_traits::TiledMma::TiledShape_MNK{}))::value;
 
+    const BlockInfo<!Is_even_N> binfo(params, bidb);
+
     //const auto SollMask = (1 << gridDim.x) - 1;
     //const auto SollMask = (1 << (gridDim.x * gridDim.y * gridDim.z)) - 1;
     if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
@@ -672,8 +674,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
     }
     //__syncthreads();
-
-    const BlockInfo<!Is_even_N> binfo(params, bidb);
+    
     if (m_block * kBlockM >= binfo.actual_seqlen_q || binfo.actual_seqlen_k == 0) return;
     
     int n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
