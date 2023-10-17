@@ -667,10 +667,10 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     const BlockInfo<!Is_even_N> binfo(params, bidb);
 
-    /*
+    /**/
     if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
         atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
-    }*/
+    }
     
 
     if (m_block * kBlockM >= binfo.actual_seqlen_q || binfo.actual_seqlen_k == 0) return;
@@ -1170,11 +1170,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - m_block * kBlockM
     );
 
-    /*
+    /**/
     __syncthreads();
     if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && tidx == 0)
         atomicOr(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 1);
-    */
+    
 
     //if (cute::thread0()) { printf("fence 1\n"); }
     /*
@@ -1467,12 +1467,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         //__threadfence();
         //atomicAnd(&CompleteMask, 0);
 
-        /*
+        /**/
         if (tidx == 0) {
             while(atomicCAS(&CompleteMask[blockIdx.z][blockIdx.y][reverse_m_block], 0, 0) != 1);
         }
         __syncthreads();
-        */
+        
         /*__threadfence();
         atomicAnd(&CompleteMask, 0);
         if (tidx == 0) {
