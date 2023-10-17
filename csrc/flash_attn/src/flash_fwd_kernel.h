@@ -1206,7 +1206,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2){
             
         n_block_max = (cute::ceil_div(binfo.actual_seqlen_k, kBlockN) + 1) / 2 - cute::ceil_div((m_block + 1) * kBlockM, kBlockN);
-        n_block = n_block_max - 1;
+        n_block = 0;
         /*if (cute::thread0()) { printf("n_block_max=%d\n", n_block_max); 
         printf("binfo.actual_seqlen_k=%d\n", binfo.actual_seqlen_k); 
         printf("kBlockN=%d\n", kBlockN); 
@@ -1218,11 +1218,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             + reverse_m_block * kBlockM * params.q_row_stride + bidh * params.q_head_stride;
         // We move K and V to the last block.
         const index_t row_offset_k_frag = binfo.k_offset(params.k_batch_stride, params.k_row_stride, bidb)
-            + (n_block_max - 1) * kBlockN * params.k_row_stride + (bidh / params.h_h_k_ratio) * params.k_head_stride;
+            + 0 * kBlockN * params.k_row_stride + (bidh / params.h_h_k_ratio) * params.k_head_stride;
         const index_t row_offset_v_frag = binfo.k_offset(params.v_batch_stride, params.v_row_stride, bidb)
-            + (n_block_max - 1) * kBlockN * params.v_row_stride + (bidh / params.h_h_k_ratio) * params.v_head_stride;
+            +0 * kBlockN * params.v_row_stride + (bidh / params.h_h_k_ratio) * params.v_head_stride;
         const index_t row_offset_p_frag = ((bidb * params.h + bidh) * params.seqlen_q_rounded
-            + reverse_m_block * kBlockM) * params.seqlen_k_rounded + (n_block_max - 1) * kBlockN;
+            + reverse_m_block * kBlockM) * params.seqlen_k_rounded + 0 * kBlockN;
 
         gQ = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.q_ptr) + row_offset_q_frag),
                                 Shape<Int<kBlockM>, Int<kHeadDim>>{},
@@ -1301,8 +1301,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }
 
         // We don't need to clear the sK smem tiles since we'll mask out the scores anyway.
-        flash::copy<Is_even_N, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV,
-                                        binfo.actual_seqlen_k - n_block * kBlockN);
+        /*flash::copy<Is_even_N, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV,
+                                        binfo.actual_seqlen_k - 0 * kBlockN);
         cute::cp_async_fence();
         // if (threadIdx.x == 0 && blockIdx.y == 0 && blockIdx.z < 2) { print(tKgK); }
         // __syncthreads();
@@ -1313,7 +1313,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             Tensor tSrQ_copy_view = smem_thr_copy_Q.retile_D(tSrQ);
             CUTE_STATIC_ASSERT_V(size<1>(tSsQ) == size<1>(tSrQ_copy_view));            // M
             cute::copy(smem_tiled_copy_Q, tSsQ, tSrQ_copy_view);
-        }
+        }*/
 
         //auto seeds = at::cuda::philox::unpack(params.philox_args);
         //unsigned long long seed = std::get<0>(seeds);
@@ -1334,24 +1334,25 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         
         //if (cute::thread0()) { printf("fence 1.8\n"); }
 
-        for (; n_block >= 0; --n_block) {
+        for (; n_block < n_block_max; ++n_block) {
             Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
             clear(acc_s);
             flash::cp_async_wait<0>();
             __syncthreads();
             // Advance gV
             //if (cute::thread0()) { printf("fence 1.81\n"); }
-            if (n_block < n_block_max - 1) {
-                tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
+            if (n_block > 0) {
+                tVgV.data() = tVgV.data() + (+int(kBlockN * params.v_row_stride));
                 flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
-            } else {
+                cute::cp_async_fence();
+            } 
+            /*else {
                 // Clear the smem tiles to account for predicated off loads
                 flash::copy<Is_even_N, Is_even_K, true>(
                     gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV, binfo.actual_seqlen_k - n_block * kBlockN
                 );
             }
-
-            cute::cp_async_fence();
+            cute::cp_async_fence();*/
 
             flash::gemm<Kernel_traits::Is_Q_in_regs>(
                 acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
@@ -1361,7 +1362,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             __syncthreads();
             if (n_block > 0) {
                 // Advance gK
-                tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+                tKgK.data() = tKgK.data() + (+int(kBlockN * params.k_row_stride));
                 flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
                 cute::cp_async_fence();
             }
@@ -1372,7 +1373,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
             Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
 
-            n_block == n_block_max - 1
+            n_block == 0
                 ? softmax_rescale_o<true>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
                 : softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
@@ -1391,7 +1392,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                     block_row_idx, block_col_idx, kNWarps
                 );
                 flash::write_softmax_to_gmem(tOrP_copy, tPgP, gmem_tiled_copy_P);
-                tPgP.data() = tPgP.data() + (-kBlockN);
+                tPgP.data() = tPgP.data() + (+kBlockN);
             }
             if (Is_dropout) {
                 flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
