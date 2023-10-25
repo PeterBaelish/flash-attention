@@ -1639,7 +1639,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         #pragma unroll
         for (int mi = 0; mi < size<0>(rOf_rowcol); ++mi) {
             float sum = scores_sum(mi);
-            float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
+            //float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
             lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
         }
 
