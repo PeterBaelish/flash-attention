@@ -891,9 +891,17 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         clear(acc_s);
         flash::cp_async_wait<0>();
         __syncthreads();
+
         // Advance gV
-        tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
-        flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+        if (n_block > 0) {
+            tVgV.data() = tVgV.data() + (+int(kBlockN * params.v_row_stride));
+            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+        } else {
+            // Clear the smem tiles to account for predicated off loads
+            flash::copy<Is_even_N, Is_even_K, true>(
+                gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV, binfo.actual_seqlen_k - n_block * kBlockN
+            );
+        }
         cute::cp_async_fence();
 
         flash::gemm<Kernel_traits::Is_Q_in_regs>(
@@ -901,17 +909,16 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             smem_thr_copy_Q, smem_thr_copy_K
         );
 
-
         flash::cp_async_wait<0>();
         __syncthreads();
-        if (n_block < dst - n_masking_steps) {
+        //if (n_block < dst - n_masking_steps) {
             // Advance gK
-            tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+            tKgK.data() = tKgK.data() + (+int(kBlockN * params.k_row_stride));
             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
             // isn't right and we get race conditions.
             cute::cp_async_fence();
-        }
+        //}
 
         // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
         Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
@@ -934,7 +941,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 block_row_idx, block_col_idx, kNWarps
             );
             flash::write_softmax_to_gmem(tOrP_copy, tPgP, gmem_tiled_copy_P);
-            tPgP.data() = tPgP.data() + (-kBlockN);
+            tPgP.data() = tPgP.data() + (+kBlockN);
         }
         if (Is_dropout) {
             flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
@@ -951,14 +958,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         __syncthreads();
 
         // Advance gV
-        if (n_block < dst) {
-            tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
-            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
-        } else {
-            // Clear the smem tiles to account for predicated off loads
+        if (dst == 0) {
             flash::copy<Is_even_N, Is_even_K, true>(
                 gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV, binfo.actual_seqlen_k - n_block * kBlockN
             );
+        } else {
+            tVgV.data() = tVgV.data() + (+int(kBlockN * params.v_row_stride));
+            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
         }
         cute::cp_async_fence();
 
@@ -997,7 +1003,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         __syncthreads();
         if (n_block < dst) {
             // Advance gK
-            tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+            tKgK.data() = tKgK.data() + (+int(kBlockN * params.k_row_stride));
             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
             // isn't right and we get race conditions.
@@ -1021,7 +1027,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
                 block_row_idx, block_col_idx, kNWarps
             );
             flash::write_softmax_to_gmem(tOrP_copy, tPgP, gmem_tiled_copy_P);
-            tPgP.data() = tPgP.data() + (-kBlockN);
+            tPgP.data() = tPgP.data() + (+kBlockN);
         }
         if (Is_dropout) {
             flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
