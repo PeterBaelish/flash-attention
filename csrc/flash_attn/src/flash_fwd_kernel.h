@@ -883,7 +883,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //Bae: n_masking_steps controls the masking of very last block, n_block control the whole number of masking blocks
 
-    constexpr int n_masking_steps = m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 ? 0 : cute::ceil_div(kBlockM, kBlockN); //Bae: this is for the last causal block
+    int n_masking_steps = m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 ? 0 : cute::ceil_div(kBlockM, kBlockN); //Bae: this is for the last causal block
 
     // These are the iterations where we don't need masking on S
     for (; n_block <= dst - n_masking_steps; ++n_block) {
