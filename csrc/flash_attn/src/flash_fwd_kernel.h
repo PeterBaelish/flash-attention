@@ -843,7 +843,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //Bae: If m_block > floor(N/2), we only compute ceil(d/2) blocks
     if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1){ 
-        dst = cute::ceil_div(binfo.actual_seqlen_k, kBlockN) / 2; 
+        dst = cute::ceil_div(kBlockM, kBlockN) * ((cute::ceil_div(binfo.actual_seqlen_q, kBlockM) / 2) + 1) - 1; 
     }  
     
     // We don't need to clear the sK smem tiles since we'll mask out the scores anyway.
@@ -911,14 +911,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         flash::cp_async_wait<0>();
         __syncthreads();
-        //if (n_block < dst - n_masking_steps) {
+        if (!(n_masking_steps == 0 && n_block == dst)) {
             // Advance gK
             tKgK.data() = tKgK.data() + (+int(kBlockN * params.k_row_stride));
             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
             // This cp_async_fence needs to be in the if block, otherwise the synchronization
             // isn't right and we get race conditions.
             cute::cp_async_fence();
-        //}
+        }
 
         // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
         Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
@@ -1216,7 +1216,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         n_block_max = std::min(n_block_max, cute::ceil_div((reverse_m_block + 1) * kBlockM, kBlockN));
         n_block = n_block_max - 1;
 
-        dst = cute::ceil_div(binfo.actual_seqlen_k, kBlockN) / 2 + 1;
+        //dst = cute::ceil_div(binfo.actual_seqlen_k, kBlockN) / 2 + 1;
+        dst = cute::ceil_div(kBlockM, kBlockN) * ((cute::ceil_div(binfo.actual_seqlen_q, kBlockM) / 2) + 1);
 
         /*if (cute::thread0()) { printf("n_block_max=%d\n", n_block_max); 
         printf("binfo.actual_seqlen_k=%d\n", binfo.actual_seqlen_k); 
