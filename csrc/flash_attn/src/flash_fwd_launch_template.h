@@ -37,7 +37,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     // https://github.com/HazyResearch/flash-attention/issues/21
 
     const int num_m_block = (params.seqlen_q + Kernel_traits::kBlockM - 1) / Kernel_traits::kBlockM;
-    dim3 grid(num_m_block, params.b, params.h);
+
     // We also use is_even_N to set Unpadded in the BlockInfo constructor, so we need to check
     // for cu_seqlens_q as well.
     const bool is_even_N = params.cu_seqlens_q == nullptr && params.cu_seqlens_k == nullptr && params.seqlen_k % Kernel_traits::kBlockN == 0;
@@ -49,18 +49,37 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 // Will only return softmax if dropout, to reduce compilation time.
                 /* auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
                 // auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, true, ReturnSoftmaxConst && Is_dropout>;*/
-
-                auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
-                if (smem_size >= 48 * 1024) {
-                    C10_CUDA_CHECK(cudaFuncSetAttribute(
-                        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
+                if(Is_causal) {
+                    dim3 grid(num_m_block, 1, 1);
+                    auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
+                    int ctas_per_sm;
+                    if (smem_size >= 48 * 1024) {
+                        C10_CUDA_CHECK(cudaFuncSetAttribute(
+                            kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
+                    }
+                    cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
+                    printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
+                    for (int i = 0; i < params.b; i++){
+                        for (int j = 0; j < params.h; j++){
+                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params, i, j);
+                            cudaStreamSynchronize(stream);
+                        }
+                    }
                 }
-                int ctas_per_sm;
-                cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-                    &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
-                printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
-                // printf("yy\n");
-                kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params);
+                else {
+                    dim3 grid(num_m_block, params.b, params.h);
+                    auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, true, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
+                    if (smem_size >= 48 * 1024) {
+                        C10_CUDA_CHECK(cudaFuncSetAttribute(
+                            kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
+                    }
+                    int ctas_per_sm;
+                    cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                        &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
+                    printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
+                    kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params);
+                }
                 C10_CUDA_KERNEL_LAUNCH_CHECK();  
                 //printf("yyy\n");
             });

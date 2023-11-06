@@ -678,8 +678,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //if (cute::thread0()) { printf("fence -7\n"); }
 
-    uint64_t start_time = GlobalTimer64();
-    uint32_t sm_id = GetSMID();
+    //uint64_t start_time = GlobalTimer64();
+    //uint32_t sm_id = GetSMID();
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -1852,12 +1852,12 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(taccOsOf_store);
         }*/
     }
-    uint64_t end_time = GlobalTimer64();
+    /*uint64_t end_time = GlobalTimer64();
     if(tidx == 0) {
         printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
             blockIdx.x, blockIdx.y, blockIdx.z, sm_id, start_time, end_time, end_time-start_time);
     }
-    /**/
+    */
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1881,12 +1881,12 @@ inline __device__ void compute_attn(const Params &params) {
 }
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
-inline __device__ void compute_attn_casual(const Params &params) {
+inline __device__ void compute_attn_casual(const Params &params, const int bidb, const int bidh) {
     const int m_block = gridDim.x - 1 - blockIdx.x;
     // The block index for the batch.
-    const int bidb = blockIdx.y;
+    //const int bidb = ;
     // The block index for the head.
-    const int bidh = blockIdx.z;
+    //const int bidh = ;
 
     // We want the fwd and bwd to generate the same dropout pattern (RNG), without restricting
     // them to have the same number of threads or have to traverse the attention matrix
