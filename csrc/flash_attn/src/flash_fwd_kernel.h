@@ -678,8 +678,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //if (cute::thread0()) { printf("fence -7\n"); }
 
-    //uint64_t start_time = GlobalTimer64();
-    //uint32_t sm_id = GetSMID();
+    uint64_t start_time = GlobalTimer64();
+    uint32_t sm_id = GetSMID();
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -1607,7 +1607,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         /**/
         if (tidx == 0) {
-            while(atomicCAS(&CompleteMask[bidh][bidb][reverse_m_block], 0, 0) != 1);
+            while(atomicCAS(&CompleteMask[bidh][bidb][m_block], 0, 0) != 1);
         }
         __syncthreads();
         
@@ -1852,19 +1852,20 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             print(taccOsOf_store);
         }*/
     }
-    /*uint64_t end_time = GlobalTimer64();
+    /**/
+    uint64_t end_time = GlobalTimer64();
     if(tidx == 0) {
         printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
-            blockIdx.x, blockIdx.y, blockIdx.z, sm_id, start_time, end_time, end_time-start_time);
+            blockIdx.x, bidb, bidh, sm_id, start_time, end_time, end_time-start_time);
     }
-    */
+    
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn(const Params &params) {
-    const int m_block = blockIdx.x;
+    const int m_block = gridDim.x - 1 - blockIdx.x;
     // The block index for the batch.
     const int bidb = blockIdx.y;
     // The block index for the head.

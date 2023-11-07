@@ -9,6 +9,7 @@
 #include "static_switch.h"
 #include "flash.h"
 #include "flash_fwd_kernel.h"
+#include <libsmctrl.h>
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax>
 __global__ void flash_fwd_kernel(Flash_fwd_params params) {
@@ -60,10 +61,20 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                         &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                     printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
+                    
+                    cudaStream_t streams[7];
+                    uint64_t mask = 0x3full;
+                    for(int i = 0; i < 7; i++) {
+                        cudaStreamCreate(&streams[i]);
+                        //CreateCUDAStreamWithPriorityAndMask(stream_priority, sm_mask, &streams[i]);
+                        libsmctrl_set_stream_mask(streams[i], mask);
+                        mask <<= 6;
+                    }
+
+                    #pragma unroll
                     for (int i = 0; i < params.b; i++){
                         for (int j = 0; j < params.h; j++){
-                            //CreateCUDAStreamWithPriorityAndMask(params->stream_priority, params->sm_mask, &(state->stream))
-                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params, i, j);
+                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*params.b+j)%7]>>>(params, i, j);
                             //cudaStreamSynchronize(stream);
                         }
                     }
