@@ -62,8 +62,9 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
                     for (int i = 0; i < params.b; i++){
                         for (int j = 0; j < params.h; j++){
+                            //CreateCUDAStreamWithPriorityAndMask(params->stream_priority, params->sm_mask, &(state->stream))
                             kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params, i, j);
-                            cudaStreamSynchronize(stream);
+                            //cudaStreamSynchronize(stream);
                         }
                     }
                 }
