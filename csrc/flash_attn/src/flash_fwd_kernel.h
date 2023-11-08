@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <stdint.h>
 #include <cmath>
 #include <cute/algorithm/copy.hpp>
 #include <cute/algorithm/gemm.hpp>
@@ -164,36 +163,6 @@ inline __device__ void write_softmax_to_gmem(
         cute::copy(gmem_tiled_copy_P, tPrP(_, mi), tPgP(_, mi, 0));
     }
 };
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Returns the value of CUDA's global nanosecond timer. This is more convoluted
-// than should be necessary due to a bug in this register on the Jetson boards.
-__device__ inline uint64_t GlobalTimer64(void) {
-  // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
-  // around after the upper bits have already been read. Work around this by
-  // reading the high bits a second time. Use the second value to detect a
-  // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
-  // would be valid, it's passed over during the duration of the reading. If no
-  // rollover occurred, just return the initial reading.
-  volatile uint64_t first_reading;
-  volatile uint32_t second_reading;
-  uint32_t high_bits_first;
-  asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
-  high_bits_first = first_reading >> 32;
-  asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
-  if (high_bits_first == second_reading) {
-    return first_reading;
-  }
-  // Return the value with the updated high bits, but the low bits set to 0.
-  return ((uint64_t) second_reading) << 32;
-}
-
-// Returns the ID of the SM this is executed on.
-static __device__ __inline__ uint32_t GetSMID(void) {
-  uint32_t to_return;
-  asm volatile("mov.u32 %0, %%smid;" : "=r"(to_return));
-  return to_return;
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -646,7 +615,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     );
 }
 
-__device__ int CompleteMask[32][32][256];
+__device__ int CompleteMask[64][64][64];
 //__device__ int CompleteMask;
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
@@ -678,9 +647,6 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //if (cute::thread0()) { printf("fence -7\n"); }
 
-    uint64_t start_time = GlobalTimer64();
-    uint32_t sm_id = GetSMID();
-
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
     using index_t = typename Kernel_traits::index_t;
@@ -703,7 +669,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     /**/
     if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
-        atomicAnd(&CompleteMask[bidh][bidb][blockIdx.x], 0);
+        atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
     }
     
 
@@ -1214,7 +1180,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     /**/
     __syncthreads();
     if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && tidx == 0)
-        atomicOr(&CompleteMask[bidh][bidb][blockIdx.x], 1);
+        atomicOr(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 1);
     
 
     //if (cute::thread0()) { printf("fence 1\n"); }
@@ -1607,7 +1573,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         /**/
         if (tidx == 0) {
-            while(atomicCAS(&CompleteMask[bidh][bidb][m_block], 0, 0) != 1);
+            while(atomicCAS(&CompleteMask[blockIdx.z][blockIdx.y][reverse_m_block], 0, 0) != 1);
         }
         __syncthreads();
         
@@ -1853,19 +1819,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }*/
     }
     /**/
-    uint64_t end_time = GlobalTimer64();
-    if(tidx == 0) {
-        printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
-            blockIdx.x, bidb, bidh, sm_id, start_time, end_time, end_time-start_time);
-    }
-    
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn(const Params &params) {
-    const int m_block = gridDim.x - 1 - blockIdx.x;
+    const int m_block = blockIdx.x;
     // The block index for the batch.
     const int bidb = blockIdx.y;
     // The block index for the head.
@@ -1882,12 +1842,12 @@ inline __device__ void compute_attn(const Params &params) {
 }
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
-inline __device__ void compute_attn_casual(const Params &params, const int bidb, const int bidh) {
+inline __device__ void compute_attn_casual(const Params &params) {
     const int m_block = blockIdx.x;
     // The block index for the batch.
-    //const int bidb = ;
+    const int bidb = blockIdx.y;
     // The block index for the head.
-    //const int bidh = ;
+    const int bidh = blockIdx.z;
 
     // We want the fwd and bwd to generate the same dropout pattern (RNG), without restricting
     // them to have the same number of threads or have to traverse the attention matrix
