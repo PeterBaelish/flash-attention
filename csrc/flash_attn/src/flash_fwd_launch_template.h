@@ -16,7 +16,7 @@ __global__ void flash_fwd_kernel(Flash_fwd_params params) {
 }
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax>
-__global__ void flash_fwd_kernel_casual(Flash_fwd_params params, const int bidb, const int bidh) {
+__global__ void flash_fwd_kernel_casual(Flash_fwd_params params) {
     /*int tidx = threadIdx.x;
     // The global block index.
     int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
