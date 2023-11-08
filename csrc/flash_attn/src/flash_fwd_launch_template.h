@@ -22,7 +22,7 @@ __global__ void flash_fwd_kernel_casual(Flash_fwd_params params, const int bidb,
     int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
     if(tidx == 0 && block_id == 0)
         printf("z\n");*/
-    flash::compute_attn_casual<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh);
+    flash::compute_attn_casual<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params);
 }
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal>
