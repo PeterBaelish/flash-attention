@@ -201,6 +201,9 @@ if not SKIP_CUDA_BUILD:
                 Path(this_dir) / 'csrc' / 'flash_attn' / 'src',
                 Path(this_dir) / 'csrc' / 'cutlass' / 'include',
             ],
+            libraries=[
+                "cuda"
+            ]
         )
     )
 
