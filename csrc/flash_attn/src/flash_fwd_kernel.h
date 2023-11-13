@@ -669,7 +669,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     /**/
     if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
-        atomicAnd(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 0);
+        atomicAnd(&CompleteMask[bidh][bidb][blockIdx.x], 0);
     }
     
 
@@ -1180,7 +1180,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     /**/
     __syncthreads();
     if(m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && tidx == 0)
-        atomicOr(&CompleteMask[blockIdx.z][blockIdx.y][blockIdx.x], 1);
+        atomicOr(&CompleteMask[bidh][bidb][blockIdx.x], 1);
     
 
     //if (cute::thread0()) { printf("fence 1\n"); }
@@ -1573,7 +1573,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         /**/
         if (tidx == 0) {
-            while(atomicCAS(&CompleteMask[blockIdx.z][blockIdx.y][reverse_m_block], 0, 0) != 1);
+            while(atomicCAS(&CompleteMask[bidh][bidb][reverse_m_block], 0, 0) != 1);
         }
         __syncthreads();
         
@@ -1842,12 +1842,12 @@ inline __device__ void compute_attn(const Params &params) {
 }
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
-inline __device__ void compute_attn_casual(const Params &params) {
+inline __device__ void compute_attn_casual(const Params &params, const int bidb, const int bidh) {
     const int m_block = blockIdx.x;
     // The block index for the batch.
-    const int bidb = blockIdx.y;
+    // const int bidb = blockIdx.y;
     // The block index for the head.
-    const int bidh = blockIdx.z;
+    // const int bidh = blockIdx.z;
 
     // We want the fwd and bwd to generate the same dropout pattern (RNG), without restricting
     // them to have the same number of threads or have to traverse the attention matrix
@@ -1858,7 +1858,7 @@ inline __device__ void compute_attn_casual(const Params &params) {
     // the 16 x 32 block within the attention matrix, we can generate the exact same dropout pattern.
 
     if(!Is_causal)
-        flash::compute_attn_1rowblock<Kernel_traits, Is_dropout, true/*Is_causal*/, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh, m_block);
+        flash::compute_attn_1rowblock<Kernel_traits, Is_dropout, true/*Is_causal*/, Is_even_N, Is_even_K, Return_softmax>(params, blockIdx.y, blockIdx.z, m_block);
     else
         flash::compute_attn_1rowblock_causal<Kernel_traits, Is_dropout, true/*Is_causal*/, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh, m_block);
 }
