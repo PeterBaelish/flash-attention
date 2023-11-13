@@ -1573,7 +1573,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
         /**/
         if (tidx == 0) {
-            while(atomicCAS(&CompleteMask[bidh][bidb][reverse_m_block], 0, 0) != 1);
+            while(atomicCAS(&CompleteMask[bidh][bidb][m_block], 0, 0) != 1);
         }
         __syncthreads();
         
@@ -1843,7 +1843,7 @@ inline __device__ void compute_attn(const Params &params) {
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
 inline __device__ void compute_attn_casual(const Params &params, const int bidb, const int bidh) {
-    const int m_block = blockIdx.x;
+    const int m_block = gridDim.x - 1 - blockIdx.x;
     // The block index for the batch.
     // const int bidb = blockIdx.y;
     // The block index for the head.
