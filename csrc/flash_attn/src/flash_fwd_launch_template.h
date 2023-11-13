@@ -140,7 +140,7 @@ static void setup_sm_control_11() {
 }
 
 // Set default mask for all launches
-void libsmctrl_set_global_mask(uint64_t mask) {
+static void libsmctrl_set_global_mask(uint64_t mask) {
 	int ver;
 	cuDriverGetVersion(&ver);
 	if (ver > 10020) {
@@ -155,7 +155,7 @@ void libsmctrl_set_global_mask(uint64_t mask) {
 }
 
 // Set mask for next launch from this thread
-void libsmctrl_set_next_mask(uint64_t mask) {
+static void libsmctrl_set_next_mask(uint64_t mask) {
 	if (!sm_control_setup_called)
 		setup_sm_control_11();
 	g_next_sm_mask = mask;
@@ -218,7 +218,7 @@ int detect_parker_soc() {
 // Should work for CUDA 8.0 through 12.1
 // A cudaStream_t is a CUstream*. We use void* to avoid a cuda.h dependency in
 // our header
-void libsmctrl_set_stream_mask(void* stream, uint64_t mask) {
+static void libsmctrl_set_stream_mask(void* stream, uint64_t mask) {
 	char* stream_struct_base = *(char**)stream;
 	struct stream_sm_mask* hw_mask;
 	int ver;
@@ -316,7 +316,7 @@ static int read_int_procfile(char* filename, uint64_t* out) {
 // We support up to 12 GPCs per GPU, and up to 16 GPUs.
 static uint64_t tpc_mask_per_gpc_per_dev[16][12];
 // Output mask is vtpc-indexed (virtual TPC)
-int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, int dev) {
+static int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, int dev) {
 	uint32_t i, j, vtpc_idx = 0;
 	uint64_t gpc_mask, num_tpc_per_gpc, max_gpcs, gpc_tpc_mask;
 	int err;
@@ -366,7 +366,7 @@ int libsmctrl_get_gpc_info(uint32_t* num_enabled_gpcs, uint64_t** tpcs_for_gpc, 
 	return 0;
 }
 
-int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev) {
+static int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev) {
 	uint32_t num_gpcs;
 	uint64_t* tpcs_per_gpc;
 	int res;
@@ -381,7 +381,7 @@ int libsmctrl_get_tpc_info(uint32_t* num_tpcs, int dev) {
 
 // @param dev Device index as understood by CUDA **can differ from nvdebug idx**
 // This implementation is fragile, and could be incorrect for odd GPUs
-int libsmctrl_get_tpc_info_cuda(uint32_t* num_tpcs, int cuda_dev) {
+static int libsmctrl_get_tpc_info_cuda(uint32_t* num_tpcs, int cuda_dev) {
 	int num_sms, major, minor, res = 0;
 	const char* err_str;
 	if (res = cuInit(0))
