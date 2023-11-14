@@ -11,34 +11,13 @@
 #include "flash_fwd_kernel.h"
 
 #include <cuda.h>
-
+#include <chrono>
 #include <errno.h>
 #include <error.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
-
-__device__ inline uint64_t GlobalTimer64(void) {
-  // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
-  // around after the upper bits have already been read. Work around this by
-  // reading the high bits a second time. Use the second value to detect a
-  // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
-  // would be valid, it's passed over during the duration of the reading. If no
-  // rollover occurred, just return the initial reading.
-  volatile uint64_t first_reading;
-  volatile uint32_t second_reading;
-  uint32_t high_bits_first;
-  asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
-  high_bits_first = first_reading >> 32;
-  asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
-  if (high_bits_first == second_reading) {
-    return first_reading;
-  }
-  // Return the value with the updated high bits, but the low bits set to 0.
-  return ((uint64_t) second_reading) << 32;
-}
-
 
 /**
  * Copyright 2023 Joshua Bakita
@@ -420,7 +399,7 @@ __global__ void flash_fwd_kernel_casual(Flash_fwd_params params, const int bidb,
 }
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal>
-__global__ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
+void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     constexpr size_t smem_size = Kernel_traits::kSmemSize;
     
     //printf("fuck you smem_size = %d\n", smem_size);
@@ -468,8 +447,10 @@ __global__ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     //#pragma unroll
                     for (int i = 0; i < params.b; i++) {
                         for (int j = 0; j < params.h; j++) {
-                            uint64_t start_time = GlobalTimer64();
-                            printf("start time of kernel(%d, %d) is %llu\n", i, j, start_time);
+                            auto now = std::chrono::high_resolution_clock::now();
+                            auto duration = now.time_since_epoch();
+                            auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+                            printf("start time of kernel(%d, %d) is %llu\n", i, j, nanoseconds);
                             kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*params.b+j)%7]>>>(params, i, j);
                         }
                     }
