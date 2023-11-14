@@ -643,7 +643,7 @@ static __device__ __inline__ uint32_t GetSMID(void) {
 }
 
 
-__device__ int CompleteMask[64][64][64];
+__device__ int CompleteMask[32][32][1024];
 //__device__ int CompleteMask;
 
 template<typename Kernel_traits, bool Is_dropout, bool Is_causal, bool Is_even_N, bool Is_even_K, bool Return_softmax, typename Params>
