@@ -615,6 +615,34 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     );
 }
 
+__device__ inline uint64_t GlobalTimer64(void) {
+  // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
+  // around after the upper bits have already been read. Work around this by
+  // reading the high bits a second time. Use the second value to detect a
+  // rollover, and set the lower bits of the 64-bit "timer reading" to 0, which
+  // would be valid, it's passed over during the duration of the reading. If no
+  // rollover occurred, just return the initial reading.
+  volatile uint64_t first_reading;
+  volatile uint32_t second_reading;
+  uint32_t high_bits_first;
+  asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(first_reading));
+  high_bits_first = first_reading >> 32;
+  asm volatile("mov.u32 %0, %%globaltimer_hi;" : "=r"(second_reading));
+  if (high_bits_first == second_reading) {
+    return first_reading;
+  }
+  // Return the value with the updated high bits, but the low bits set to 0.
+  return ((uint64_t) second_reading) << 32;
+}
+
+// Returns the ID of the SM this is executed on.
+static __device__ __inline__ uint32_t GetSMID(void) {
+  uint32_t to_return;
+  asm volatile("mov.u32 %0, %%smid;" : "=r"(to_return));
+  return to_return;
+}
+
+
 __device__ int CompleteMask[64][64][64];
 //__device__ int CompleteMask;
 
@@ -646,6 +674,9 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     */
 
     //if (cute::thread0()) { printf("fence -7\n"); }
+    uint64_t start_time = GlobalTimer64();
+    uint32_t sm_id = GetSMID();
+
 
     using Element = typename Kernel_traits::Element;
     using ElementAccum = typename Kernel_traits::ElementAccum;
@@ -1819,6 +1850,11 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }*/
     }
     /**/
+    uint64_t end_time = GlobalTimer64();
+    if(tidx == 0) {
+        printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
+            blockIdx.x, bidb, bidh, sm_id, start_time, end_time, end_time-start_time);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
