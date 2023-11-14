@@ -438,21 +438,21 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     cudaStream_t streams[7];
                     uint64_t mask = 0x3full;
 
-                    #pragma unroll
+                    //#pragma unroll
                     for(int i = 0; i < 7; i++) {
                         cudaStreamCreate(&streams[i]);
                         libsmctrl_set_stream_mask(streams[i], ~mask);
                         mask <<= 6;
                     }
 
-                    #pragma unroll
+                    //#pragma unroll
                     for (int i = 0; i < params.b; i++) {
                         for (int j = 0; j < params.h; j++) {
                             kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*params.b+j)%7]>>>(params, i, j);
                         }
                     }
 
-                    #pragma unroll
+                    //#pragma unroll
                     for(int i = 0; i < 7; i++) {
                         cudaStreamSynchronize(streams[i]);
                         cudaStreamDestroy(streams[i]);
