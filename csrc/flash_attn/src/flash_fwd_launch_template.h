@@ -419,8 +419,8 @@ __global__ void flash_fwd_kernel_casual(Flash_fwd_params params, const int bidb,
     flash::compute_attn_casual<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh);
 }
 
-templrun_flash_fwdate<typename Kernel_traits, bool Is_dropout, bool Is_causal>
-__global__ void (Flash_fwd_params &params, cudaStream_t stream) {
+template<typename Kernel_traits, bool Is_dropout, bool Is_causal>
+__global__ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
     constexpr size_t smem_size = Kernel_traits::kSmemSize;
     
     //printf("fuck you smem_size = %d\n", smem_size);
