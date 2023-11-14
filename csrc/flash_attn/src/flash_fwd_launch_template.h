@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-__device__ inline uint64_t GlobalTimer64(void) {
+__host__ __device__ inline uint64_t GlobalTimer64(void) {
   // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
   // around after the upper bits have already been read. Work around this by
   // reading the high bits a second time. Use the second value to detect a
