@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-__host__ __device__ inline uint64_t GlobalTimer64(void) {
+__device__ inline uint64_t GlobalTimer64(void) {
   // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
   // around after the upper bits have already been read. Work around this by
   // reading the high bits a second time. Use the second value to detect a
@@ -419,8 +419,8 @@ __global__ void flash_fwd_kernel_casual(Flash_fwd_params params, const int bidb,
     flash::compute_attn_casual<Kernel_traits, Is_dropout, Is_causal, Is_even_N, Is_even_K, Return_softmax>(params, bidb, bidh);
 }
 
-template<typename Kernel_traits, bool Is_dropout, bool Is_causal>
-void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
+templrun_flash_fwdate<typename Kernel_traits, bool Is_dropout, bool Is_causal>
+__global__ void (Flash_fwd_params &params, cudaStream_t stream) {
     constexpr size_t smem_size = Kernel_traits::kSmemSize;
     
     //printf("fuck you smem_size = %d\n", smem_size);
