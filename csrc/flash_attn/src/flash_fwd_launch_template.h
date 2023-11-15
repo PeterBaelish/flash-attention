@@ -434,6 +434,9 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                         &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                     printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
 
+                    auto b = params.b;
+                    auto h = params.h;
+
                     cudaStream_t streams[7];
                     uint64_t mask = 0x3full;
 
@@ -445,13 +448,13 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     }
 
                     //#pragma unroll
-                    for (int i = 0; i < params.b; i++) {
-                        for (int j = 0; j < params.h; j++) {
+                    for (int i = 0; i < b; i++) {
+                        for (int j = 0; j < h; j++) {
                             auto now = std::chrono::high_resolution_clock::now();
                             auto duration = now.time_since_epoch();
                             auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
                             printf("start time of kernel(%d, %d) is %llu\n", i, j, nanoseconds);
-                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*params.b+j)%7]>>>(params, i, j);
+                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*b+j)%7]>>>(params, i, j);
                         }
                     }
 
