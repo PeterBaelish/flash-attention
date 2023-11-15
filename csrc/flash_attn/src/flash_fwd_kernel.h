@@ -675,11 +675,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //if (cute::thread0()) { printf("fence -7\n"); }
     
-    //uint64_t start_time = GlobalTimer64();
-    auto now = std::chrono::high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
-    auto start_time = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
-    //printf("start time of kernel(%d, %d) is %llu\n", i, j, nanoseconds);
+    uint64_t start_time = GlobalTimer64();
     uint32_t sm_id = GetSMID();
 
 
@@ -1855,10 +1851,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }*/
     }
     /**/
-    //uint64_t end_time = GlobalTimer64();
-    now = std::chrono::high_resolution_clock::now();
-    duration = now.time_since_epoch();
-    auto end_time = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+    uint64_t end_time = GlobalTimer64();
     if(tidx == 0) {
         printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
             blockIdx.x, bidb, bidh, sm_id, start_time, end_time, end_time-start_time);
