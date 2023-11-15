@@ -1851,6 +1851,14 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         }*/
     }
     /**/
+    uint64_t start = clock64();
+    uint64_t end = start + (uint64_t)(1000000000);
+    while(clock64() < end) {
+            float dummy = 0.0;
+            for(int i=0;i<1000;i++){
+                    dummy += tanf(dummy) + logf(dummy);
+            }
+    }
     uint64_t end_time = GlobalTimer64();
     if(tidx == 0) {
         printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
