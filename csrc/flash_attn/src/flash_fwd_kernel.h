@@ -1233,623 +1233,623 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
     }
     __syncthreads();    */
+    
+    // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // //Bae: After complete own blocks, we should compute ptr(N-m_block) blocks fragment from 1 to d/2-f(m_block) when m_block < N/2
+    // //     This part of result should be store at reg
+    // //     We should also keep the scores_max and scores_sum in reg
 
-    //Bae: After complete own blocks, we should compute ptr(N-m_block) blocks fragment from 1 to d/2-f(m_block) when m_block < N/2
-    //     This part of result should be store at reg
-    //     We should also keep the scores_max and scores_sum in reg
+    // int reverse_m_block = ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - m_block - 1;
 
-    int reverse_m_block = ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - m_block - 1;
-
-    if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2){
+    // if(m_block + 1 < (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) + 1) / 2){
             
-        n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
-        n_block_max = std::min(n_block_max, cute::ceil_div((reverse_m_block + 1) * kBlockM, kBlockN));
-        n_block = n_block_max - 1;
+    //     n_block_max = cute::ceil_div(binfo.actual_seqlen_k, kBlockN);
+    //     n_block_max = std::min(n_block_max, cute::ceil_div((reverse_m_block + 1) * kBlockM, kBlockN));
+    //     n_block = n_block_max - 1;
 
-        //dst = cute::ceil_div(binfo.actual_seqlen_k, kBlockN) / 2 + 1;
-        dst = cute::ceil_div(kBlockM, kBlockN) * ((cute::ceil_div(binfo.actual_seqlen_q, kBlockM) / 2) + 1);
+    //     //dst = cute::ceil_div(binfo.actual_seqlen_k, kBlockN) / 2 + 1;
+    //     dst = cute::ceil_div(kBlockM, kBlockN) * ((cute::ceil_div(binfo.actual_seqlen_q, kBlockM) / 2) + 1);
 
-        /*if (cute::thread0()) { printf("n_block_max=%d\n", n_block_max); 
-        printf("binfo.actual_seqlen_k=%d\n", binfo.actual_seqlen_k); 
-        printf("kBlockN=%d\n", kBlockN); 
-        printf("m_block=%d\n", m_block);
-        printf("kBlockM=%d\n", kBlockM); 
-        }*/
-        //Bae: recompute pointers to ptr(N-m_block) blocks fragment
-        const index_t row_offset_q_frag = binfo.q_offset(params.q_batch_stride, params.q_row_stride, bidb)
-            + reverse_m_block * kBlockM * params.q_row_stride + bidh * params.q_head_stride;
-        // We move K and V to the last block.
-        const index_t row_offset_k_frag = binfo.k_offset(params.k_batch_stride, params.k_row_stride, bidb)
-            + (n_block_max - 1) * kBlockN * params.k_row_stride + (bidh / params.h_h_k_ratio) * params.k_head_stride;
-        const index_t row_offset_v_frag = binfo.k_offset(params.v_batch_stride, params.v_row_stride, bidb)
-            + (n_block_max - 1) * kBlockN * params.v_row_stride + (bidh / params.h_h_k_ratio) * params.v_head_stride;
-        const index_t row_offset_p_frag = ((bidb * params.h + bidh) * params.seqlen_q_rounded
-            + reverse_m_block * kBlockM) * params.seqlen_k_rounded + (n_block_max - 1) * kBlockN;
+    //     /*if (cute::thread0()) { printf("n_block_max=%d\n", n_block_max); 
+    //     printf("binfo.actual_seqlen_k=%d\n", binfo.actual_seqlen_k); 
+    //     printf("kBlockN=%d\n", kBlockN); 
+    //     printf("m_block=%d\n", m_block);
+    //     printf("kBlockM=%d\n", kBlockM); 
+    //     }*/
+    //     //Bae: recompute pointers to ptr(N-m_block) blocks fragment
+    //     const index_t row_offset_q_frag = binfo.q_offset(params.q_batch_stride, params.q_row_stride, bidb)
+    //         + reverse_m_block * kBlockM * params.q_row_stride + bidh * params.q_head_stride;
+    //     // We move K and V to the last block.
+    //     const index_t row_offset_k_frag = binfo.k_offset(params.k_batch_stride, params.k_row_stride, bidb)
+    //         + (n_block_max - 1) * kBlockN * params.k_row_stride + (bidh / params.h_h_k_ratio) * params.k_head_stride;
+    //     const index_t row_offset_v_frag = binfo.k_offset(params.v_batch_stride, params.v_row_stride, bidb)
+    //         + (n_block_max - 1) * kBlockN * params.v_row_stride + (bidh / params.h_h_k_ratio) * params.v_head_stride;
+    //     const index_t row_offset_p_frag = ((bidb * params.h + bidh) * params.seqlen_q_rounded
+    //         + reverse_m_block * kBlockM) * params.seqlen_k_rounded + (n_block_max - 1) * kBlockN;
 
-        gQ = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.q_ptr) + row_offset_q_frag),
-                                Shape<Int<kBlockM>, Int<kHeadDim>>{},
-                                make_stride(params.q_row_stride, _1{}));
-        gK = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.k_ptr) + row_offset_k_frag),
-                                Shape<Int<kBlockN>, Int<kHeadDim>>{},
-                                make_stride(params.k_row_stride, _1{}));
-        gV = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.v_ptr) + row_offset_v_frag),
-                                Shape<Int<kBlockN>, Int<kHeadDim>>{},
-                                make_stride(params.v_row_stride, _1{}));
-        gP = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.p_ptr) + row_offset_p_frag),
-                                Shape<Int<kBlockM>, Int<kBlockN>>{},
-                                make_stride(params.seqlen_k_rounded, _1{}));
-        //if (cute::thread0()) { printf("fence 1.5\n"); }
-        //sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
-        //                        typename Kernel_traits::SmemLayoutQ{});
-        // Careful we're using the same smem for sQ and sK | sV if Share_Q_K_smem;
-        //sK = make_tensor(sQ.data() + (Kernel_traits::Share_Q_K_smem ? 0 : size(sQ)),
-        //                        typename Kernel_traits::SmemLayoutKV{});
-        //sV = make_tensor(sK.data() + size(sK), typename Kernel_traits::SmemLayoutKV{});
-        //sVt = make_tensor(sV.data(), typename Kernel_traits::SmemLayoutVtransposed{});
-        //sVtNoSwizzle = make_tensor(sV.data(), typename Kernel_traits::SmemLayoutVtransposedNoSwizzle{});
+    //     gQ = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.q_ptr) + row_offset_q_frag),
+    //                             Shape<Int<kBlockM>, Int<kHeadDim>>{},
+    //                             make_stride(params.q_row_stride, _1{}));
+    //     gK = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.k_ptr) + row_offset_k_frag),
+    //                             Shape<Int<kBlockN>, Int<kHeadDim>>{},
+    //                             make_stride(params.k_row_stride, _1{}));
+    //     gV = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.v_ptr) + row_offset_v_frag),
+    //                             Shape<Int<kBlockN>, Int<kHeadDim>>{},
+    //                             make_stride(params.v_row_stride, _1{}));
+    //     gP = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.p_ptr) + row_offset_p_frag),
+    //                             Shape<Int<kBlockM>, Int<kBlockN>>{},
+    //                             make_stride(params.seqlen_k_rounded, _1{}));
+    //     //if (cute::thread0()) { printf("fence 1.5\n"); }
+    //     //sQ = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)),
+    //     //                        typename Kernel_traits::SmemLayoutQ{});
+    //     // Careful we're using the same smem for sQ and sK | sV if Share_Q_K_smem;
+    //     //sK = make_tensor(sQ.data() + (Kernel_traits::Share_Q_K_smem ? 0 : size(sQ)),
+    //     //                        typename Kernel_traits::SmemLayoutKV{});
+    //     //sV = make_tensor(sK.data() + size(sK), typename Kernel_traits::SmemLayoutKV{});
+    //     //sVt = make_tensor(sV.data(), typename Kernel_traits::SmemLayoutVtransposed{});
+    //     //sVtNoSwizzle = make_tensor(sV.data(), typename Kernel_traits::SmemLayoutVtransposedNoSwizzle{});
 
-        tQgQ = gmem_thr_copy_QKV.partition_S(gQ);
-        tQsQ = gmem_thr_copy_QKV.partition_D(sQ);
-        tKgK = gmem_thr_copy_QKV.partition_S(gK);  // (KCPY, KCPY_N, KCPY_K)
-        tKsK = gmem_thr_copy_QKV.partition_D(sK);
-        tVgV = gmem_thr_copy_QKV.partition_S(gV);  // (VCPY, VCPY_N, VCPY_K)
-        tVsV = gmem_thr_copy_QKV.partition_D(sV);
-        tPgP = gmem_thr_copy_P.partition_D(gP);
+    //     tQgQ = gmem_thr_copy_QKV.partition_S(gQ);
+    //     tQsQ = gmem_thr_copy_QKV.partition_D(sQ);
+    //     tKgK = gmem_thr_copy_QKV.partition_S(gK);  // (KCPY, KCPY_N, KCPY_K)
+    //     tKsK = gmem_thr_copy_QKV.partition_D(sK);
+    //     tVgV = gmem_thr_copy_QKV.partition_S(gV);  // (VCPY, VCPY_N, VCPY_K)
+    //     tVsV = gmem_thr_copy_QKV.partition_D(sV);
+    //     tPgP = gmem_thr_copy_P.partition_D(gP);
 
-        tSrQ  = thr_mma.partition_fragment_A(sQ);                           // (MMA,MMA_M,MMA_K)
-        tSrK  = thr_mma.partition_fragment_B(sK);                           // (MMA,MMA_N,MMA_K)
-        tOrVt  = thr_mma.partition_fragment_B(sVtNoSwizzle);                // (MMA, MMA_K,MMA_N)
+    //     tSrQ  = thr_mma.partition_fragment_A(sQ);                           // (MMA,MMA_M,MMA_K)
+    //     tSrK  = thr_mma.partition_fragment_B(sK);                           // (MMA,MMA_N,MMA_K)
+    //     tOrVt  = thr_mma.partition_fragment_B(sVtNoSwizzle);                // (MMA, MMA_K,MMA_N)
 
-        //auto smem_tiled_copy_Q = make_tiled_copy_A(typename Kernel_traits::SmemCopyAtom{}, tiled_mma);
-        //auto smem_thr_copy_Q = smem_tiled_copy_Q.get_thread_slice(tidx);
-        // auto smem_thr_copy_Q = make_tiled_copy_A_warpcontiguousM<MMA_M>(typename Kernel_traits::SmemCopyAtom{}, tiled_mma).get_thread_slice(tidx);
-        // if (cute::thread0()) {smem_thr_copy_Q.print_all();}
-        tSsQ = smem_thr_copy_Q.partition_S(sQ);
-        // if (cute::thread0()) {print(tSsQ.layout()); printf("\n");}
+    //     //auto smem_tiled_copy_Q = make_tiled_copy_A(typename Kernel_traits::SmemCopyAtom{}, tiled_mma);
+    //     //auto smem_thr_copy_Q = smem_tiled_copy_Q.get_thread_slice(tidx);
+    //     // auto smem_thr_copy_Q = make_tiled_copy_A_warpcontiguousM<MMA_M>(typename Kernel_traits::SmemCopyAtom{}, tiled_mma).get_thread_slice(tidx);
+    //     // if (cute::thread0()) {smem_thr_copy_Q.print_all();}
+    //     tSsQ = smem_thr_copy_Q.partition_S(sQ);
+    //     // if (cute::thread0()) {print(tSsQ.layout()); printf("\n");}
 
-        //auto smem_tiled_copy_K = make_tiled_copy_B(typename Kernel_traits::SmemCopyAtom{}, tiled_mma);
-        //auto smem_thr_copy_K = smem_tiled_copy_K.get_thread_slice(tidx);
-        tSsK = smem_thr_copy_K.partition_S(sK);
+    //     //auto smem_tiled_copy_K = make_tiled_copy_B(typename Kernel_traits::SmemCopyAtom{}, tiled_mma);
+    //     //auto smem_thr_copy_K = smem_tiled_copy_K.get_thread_slice(tidx);
+    //     tSsK = smem_thr_copy_K.partition_S(sK);
 
-        //auto smem_tiled_copy_V = make_tiled_copy_B(typename Kernel_traits::SmemCopyAtomTransposed{}, tiled_mma);
-        //auto smem_thr_copy_V = smem_tiled_copy_V.get_thread_slice(tidx);
-        tOsVt = smem_thr_copy_V.partition_S(sVt);
-        //Bae: acc_o size is (4, B_r/2, Headdim/2)
-        //Tensor acc_o = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kHeadDim>>{});  // MMA, MMA_M, MMA_K
+    //     //auto smem_tiled_copy_V = make_tiled_copy_B(typename Kernel_traits::SmemCopyAtomTransposed{}, tiled_mma);
+    //     //auto smem_thr_copy_V = smem_tiled_copy_V.get_thread_slice(tidx);
+    //     tOsVt = smem_thr_copy_V.partition_S(sVt);
+    //     //Bae: acc_o size is (4, B_r/2, Headdim/2)
+    //     //Tensor acc_o = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kHeadDim>>{});  // MMA, MMA_M, MMA_K
 
-        // Prologue
+    //     // Prologue
 
-        tQrQ = make_fragment_like(tQgQ);
-        // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
-        flash::copy<false, Is_even_K>(gmem_tiled_copy_QKV, tQgQ, tQsQ, tQcQ, tQpQ,
-                                                    binfo.actual_seqlen_q - reverse_m_block * kBlockM);
-        if (Kernel_traits::Is_Q_in_regs) { cute::cp_async_fence(); }
+    //     tQrQ = make_fragment_like(tQgQ);
+    //     // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
+    //     flash::copy<false, Is_even_K>(gmem_tiled_copy_QKV, tQgQ, tQsQ, tQcQ, tQpQ,
+    //                                                 binfo.actual_seqlen_q - reverse_m_block * kBlockM);
+    //     if (Kernel_traits::Is_Q_in_regs) { cute::cp_async_fence(); }
 
-        // // Copy rmem to smem
-        // // copy(tQrQ, tQsQ);
-        // flash::cp_async_wait<0>();
-        // __syncthreads();
-        // // if (cute::thread(1, 0)) { print(tQsQ); }
-        // // Tensor sQNoSwizzle = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)), typename Kernel_traits::SmemLayoutQNoSwizzle{});
-        // // if (cute::thread0()) { print(sQNoSwizzle); }
+    //     // // Copy rmem to smem
+    //     // // copy(tQrQ, tQsQ);
+    //     // flash::cp_async_wait<0>();
+    //     // __syncthreads();
+    //     // // if (cute::thread(1, 0)) { print(tQsQ); }
+    //     // // Tensor sQNoSwizzle = make_tensor(make_smem_ptr(reinterpret_cast<Element *>(smem_)), typename Kernel_traits::SmemLayoutQNoSwizzle{});
+    //     // // if (cute::thread0()) { print(sQNoSwizzle); }
 
-        if (Kernel_traits::Share_Q_K_smem) {
-            flash::cp_async_wait<0>();
-            __syncthreads();
-            Tensor tSrQ_copy_view = smem_thr_copy_Q.retile_D(tSrQ);
-            CUTE_STATIC_ASSERT_V(size<1>(tSsQ) == size<1>(tSrQ_copy_view));            // M
-            cute::copy(smem_tiled_copy_Q, tSsQ, tSrQ_copy_view);
-            __syncthreads();
-        }
+    //     if (Kernel_traits::Share_Q_K_smem) {
+    //         flash::cp_async_wait<0>();
+    //         __syncthreads();
+    //         Tensor tSrQ_copy_view = smem_thr_copy_Q.retile_D(tSrQ);
+    //         CUTE_STATIC_ASSERT_V(size<1>(tSsQ) == size<1>(tSrQ_copy_view));            // M
+    //         cute::copy(smem_tiled_copy_Q, tSsQ, tSrQ_copy_view);
+    //         __syncthreads();
+    //     }
 
-        // We don't need to clear the sK smem tiles since we'll mask out the scores anyway.
-        flash::copy<Is_even_N, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV,
-                                        binfo.actual_seqlen_k - n_block * kBlockN);
-        cute::cp_async_fence();
-        // if (threadIdx.x == 0 && blockIdx.y == 0 && blockIdx.z < 2) { print(tKgK); }
-        // __syncthreads();
+    //     // We don't need to clear the sK smem tiles since we'll mask out the scores anyway.
+    //     flash::copy<Is_even_N, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV,
+    //                                     binfo.actual_seqlen_k - n_block * kBlockN);
+    //     cute::cp_async_fence();
+    //     // if (threadIdx.x == 0 && blockIdx.y == 0 && blockIdx.z < 2) { print(tKgK); }
+    //     // __syncthreads();
 
-        if (Kernel_traits::Is_Q_in_regs && !Kernel_traits::Share_Q_K_smem) {
-            flash::cp_async_wait<1>();
-            __syncthreads();
-            Tensor tSrQ_copy_view = smem_thr_copy_Q.retile_D(tSrQ);
-            CUTE_STATIC_ASSERT_V(size<1>(tSsQ) == size<1>(tSrQ_copy_view));            // M
-            cute::copy(smem_tiled_copy_Q, tSsQ, tSrQ_copy_view);
-        }
+    //     if (Kernel_traits::Is_Q_in_regs && !Kernel_traits::Share_Q_K_smem) {
+    //         flash::cp_async_wait<1>();
+    //         __syncthreads();
+    //         Tensor tSrQ_copy_view = smem_thr_copy_Q.retile_D(tSrQ);
+    //         CUTE_STATIC_ASSERT_V(size<1>(tSsQ) == size<1>(tSrQ_copy_view));            // M
+    //         cute::copy(smem_tiled_copy_Q, tSsQ, tSrQ_copy_view);
+    //     }
 
-        //auto seeds = at::cuda::philox::unpack(params.philox_args);
-        //unsigned long long seed = std::get<0>(seeds);
-        //Bae: maybe tidx should be changed, but seems not important to result
-        unsigned long long offset = std::get<1>(seeds) + (bidb * params.h + bidh) * 32 + tidx % 32; 
+    //     //auto seeds = at::cuda::philox::unpack(params.philox_args);
+    //     //unsigned long long seed = std::get<0>(seeds);
+    //     //Bae: maybe tidx should be changed, but seems not important to result
+    //     unsigned long long offset = std::get<1>(seeds) + (bidb * params.h + bidh) * 32 + tidx % 32; 
 
-        // Save seed and offset for backward.
-        //if (block_id == 0 && tidx == 0) {
-        //    params.rng_state[0] = seed;
-        //    params.rng_state[1] = std::get<1>(seeds);
-        //}
+    //     // Save seed and offset for backward.
+    //     //if (block_id == 0 && tidx == 0) {
+    //     //    params.rng_state[0] = seed;
+    //     //    params.rng_state[1] = std::get<1>(seeds);
+    //     //}
 
-        //if (cute::thread0()) { printf("fence 1.75\n"); }
+    //     //if (cute::thread0()) { printf("fence 1.75\n"); }
 
-        clear(acc_o);
-        clear(scores_max);
-        clear(scores_sum);
+    //     clear(acc_o);
+    //     clear(scores_max);
+    //     clear(scores_sum);
         
-        //if (cute::thread0()) { printf("fence 1.8\n"); }
+    //     //if (cute::thread0()) { printf("fence 1.8\n"); }
 
-        // For performance reason, we separate out two kinds of iterations:
-        // those that need masking on S, and those that don't.
-        // We need masking on S for the very last block when K and V has length not multiple of kBlockN.
-        // We also need masking on S if it's causal, for the last ceil_div(kBlockM, kBlockN) blocks.
-        // We will have at least 1 "masking" iteration.
+    //     // For performance reason, we separate out two kinds of iterations:
+    //     // those that need masking on S, and those that don't.
+    //     // We need masking on S for the very last block when K and V has length not multiple of kBlockN.
+    //     // We also need masking on S if it's causal, for the last ceil_div(kBlockM, kBlockN) blocks.
+    //     // We will have at least 1 "masking" iteration.
 
-        //Bae: n_masking_steps controls the masking of very last block, n_block control the whole number of masking blocks
+    //     //Bae: n_masking_steps controls the masking of very last block, n_block control the whole number of masking blocks
 
-        constexpr int n_masking_steps = cute::ceil_div(kBlockM, kBlockN); //Bae: this is for the last causal block
-        #pragma unroll
-        for (int masking_step = 0; masking_step < n_masking_steps; ++masking_step, --n_block) {
-            Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});
-            clear(acc_s);
-            flash::cp_async_wait<0>();
-            __syncthreads();
+    //     constexpr int n_masking_steps = cute::ceil_div(kBlockM, kBlockN); //Bae: this is for the last causal block
+    //     #pragma unroll
+    //     for (int masking_step = 0; masking_step < n_masking_steps; ++masking_step, --n_block) {
+    //         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});
+    //         clear(acc_s);
+    //         flash::cp_async_wait<0>();
+    //         __syncthreads();
 
-            // Advance gV
-            if (masking_step > 0) {
-                tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
-                flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
-            } else {
-                // Clear the smem tiles to account for predicated off loads
-                flash::copy<Is_even_N, Is_even_K, true>(
-                    gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV, binfo.actual_seqlen_k - n_block * kBlockN
-                );
-            }
-            cute::cp_async_fence();
+    //         // Advance gV
+    //         if (masking_step > 0) {
+    //             tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
+    //             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+    //         } else {
+    //             // Clear the smem tiles to account for predicated off loads
+    //             flash::copy<Is_even_N, Is_even_K, true>(
+    //                 gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV, binfo.actual_seqlen_k - n_block * kBlockN
+    //             );
+    //         }
+    //         cute::cp_async_fence();
 
-            flash::gemm<Kernel_traits::Is_Q_in_regs>(
-                acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
-                smem_thr_copy_Q, smem_thr_copy_K
-            );
-            // if (cute::thread0()) { print(acc_s); }
+    //         flash::gemm<Kernel_traits::Is_Q_in_regs>(
+    //             acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
+    //             smem_thr_copy_Q, smem_thr_copy_K
+    //         );
+    //         // if (cute::thread0()) { print(acc_s); }
 
-            // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
-            Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
-            // if (cute::thread0()) { print(scores); }
-            // We don't put the masking before the matmul S = Q K^T because we don't clear sK
-            // for rows outside actual_seqlen_k. So those rows could have Inf / NaN, and the matmul
-            // can produce Inf / NaN.
+    //         // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
+    //         Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
+    //         // if (cute::thread0()) { print(scores); }
+    //         // We don't put the masking before the matmul S = Q K^T because we don't clear sK
+    //         // for rows outside actual_seqlen_k. So those rows could have Inf / NaN, and the matmul
+    //         // can produce Inf / NaN.
 
-                // Tensor caccS = make_identity_tensor(Shape<Int<kBlockM>, Int<kBlockN>>{});    // (BLK_M,BLK_N) -> (blk_m,blk_n)
-                // Tensor taccScS = thr_mma.partition_C(caccS);                           // (MMA,MMA_M,MMA_N)
-                // static_assert(decltype(size<0>(taccScS))::value == 4);
-                // // Convert to ((2, 2), MMA_M, MMA_N) then take only the row indices.
-                // Tensor idx_row = logical_divide(taccScS, Shape<_2>{})(make_coord(0, _), _, 0);
-                // Tensor idx_rowcol = make_tensor(taccScS.data(), flash::convert_layout_acc_rowcol(taccScS.layout()));
-                // flash::apply_mask_causal_w_idx(scores, idx_rowcol, n_block * kBlockN, binfo.actual_seqlen_k,
-                //                               m_block * kBlockM);
-                // Idk why it's get<1> and not get<0> of the stride.
-                // if (cute::thread0()) { print(idx_row.layout()); print(stride<1>(idx_row)); printf("stride = %d \n", get<1>(stride<1>(idx_row))); }
-                // I can't get the stride from idx_row
-                flash::apply_mask_causal(scores, n_block * kBlockN, binfo.actual_seqlen_k,
-                                        // m_block * kBlockM + get<0>(idx_row(0)),
-                                        reverse_m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4,
-                                        kNWarps * 16);
-                                        // m_block * kBlockM + (tidx / 32) * 16, kNWarps * 16);
-                                        // m_block * kBlockM + (tidx / 32) * (kBlockM / kNWarps), 16);
+    //             // Tensor caccS = make_identity_tensor(Shape<Int<kBlockM>, Int<kBlockN>>{});    // (BLK_M,BLK_N) -> (blk_m,blk_n)
+    //             // Tensor taccScS = thr_mma.partition_C(caccS);                           // (MMA,MMA_M,MMA_N)
+    //             // static_assert(decltype(size<0>(taccScS))::value == 4);
+    //             // // Convert to ((2, 2), MMA_M, MMA_N) then take only the row indices.
+    //             // Tensor idx_row = logical_divide(taccScS, Shape<_2>{})(make_coord(0, _), _, 0);
+    //             // Tensor idx_rowcol = make_tensor(taccScS.data(), flash::convert_layout_acc_rowcol(taccScS.layout()));
+    //             // flash::apply_mask_causal_w_idx(scores, idx_rowcol, n_block * kBlockN, binfo.actual_seqlen_k,
+    //             //                               m_block * kBlockM);
+    //             // Idk why it's get<1> and not get<0> of the stride.
+    //             // if (cute::thread0()) { print(idx_row.layout()); print(stride<1>(idx_row)); printf("stride = %d \n", get<1>(stride<1>(idx_row))); }
+    //             // I can't get the stride from idx_row
+    //             flash::apply_mask_causal(scores, n_block * kBlockN, binfo.actual_seqlen_k,
+    //                                     // m_block * kBlockM + get<0>(idx_row(0)),
+    //                                     reverse_m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4,
+    //                                     kNWarps * 16);
+    //                                     // m_block * kBlockM + (tidx / 32) * 16, kNWarps * 16);
+    //                                     // m_block * kBlockM + (tidx / 32) * (kBlockM / kNWarps), 16);
 
-            flash::cp_async_wait<0>();
-            __syncthreads();
-            if (n_block > dst) {
-                // Advance gK
-                tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
-                flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
-                // This cp_async_fence needs to be in the if block, otherwise the synchronization
-                // isn't right and we get race conditions.
-                cute::cp_async_fence();
-            }
+    //         flash::cp_async_wait<0>();
+    //         __syncthreads();
+    //         if (n_block > dst) {
+    //             // Advance gK
+    //             tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+    //             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
+    //             // This cp_async_fence needs to be in the if block, otherwise the synchronization
+    //             // isn't right and we get race conditions.
+    //             cute::cp_async_fence();
+    //         }
 
-            // TODO: when we have key_padding_mask we'll need to Check_inf
-            masking_step == 0
-                ? softmax_rescale_o<true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
-                : softmax_rescale_o<false, Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+    //         // TODO: when we have key_padding_mask we'll need to Check_inf
+    //         masking_step == 0
+    //             ? softmax_rescale_o<true,  Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2)
+    //             : softmax_rescale_o<false, Is_causal>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
-            // Convert scores from fp32 to fp16/bf16
-            Tensor rP = flash::convert_type<Element>(scores);
-            // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
-            // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
-            Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_rowcol_Aregs<Kernel_traits::TiledMma>(rP.layout()));
-            uint32_t block_row_idx = reverse_m_block * (kBlockM / 16) + tidx / 32;
-            uint32_t block_col_idx = n_block * (kBlockN / 32);
-            if (Return_softmax) {
-                Tensor tOrP_copy = make_fragment_like(tOrP);
-                cute::copy(tOrP, tOrP_copy);
-                flash::apply_dropout<true>(
-                    tOrP_copy, params.p_dropout_in_uint8_t, seed, offset,
-                    block_row_idx, block_col_idx, kNWarps
-                );
-                flash::write_softmax_to_gmem(tOrP_copy, tPgP, gmem_tiled_copy_P);
-                tPgP.data() = tPgP.data() + (-kBlockN);
-            }
-            if (Is_dropout) {
-                flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
-                                    block_row_idx, block_col_idx, kNWarps);
-            }
-            // if (cute::thread0()) { print(tOrP); }
+    //         // Convert scores from fp32 to fp16/bf16
+    //         Tensor rP = flash::convert_type<Element>(scores);
+    //         // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
+    //         // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
+    //         Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_rowcol_Aregs<Kernel_traits::TiledMma>(rP.layout()));
+    //         uint32_t block_row_idx = reverse_m_block * (kBlockM / 16) + tidx / 32;
+    //         uint32_t block_col_idx = n_block * (kBlockN / 32);
+    //         if (Return_softmax) {
+    //             Tensor tOrP_copy = make_fragment_like(tOrP);
+    //             cute::copy(tOrP, tOrP_copy);
+    //             flash::apply_dropout<true>(
+    //                 tOrP_copy, params.p_dropout_in_uint8_t, seed, offset,
+    //                 block_row_idx, block_col_idx, kNWarps
+    //             );
+    //             flash::write_softmax_to_gmem(tOrP_copy, tPgP, gmem_tiled_copy_P);
+    //             tPgP.data() = tPgP.data() + (-kBlockN);
+    //         }
+    //         if (Is_dropout) {
+    //             flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
+    //                                 block_row_idx, block_col_idx, kNWarps);
+    //         }
+    //         // if (cute::thread0()) { print(tOrP); }
 
-            flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
-            // if (cute::thread0()) { print(scores); }
+    //         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
+    //         // if (cute::thread0()) { print(scores); }
 
-            // This check is at the end of the loop since we always have at least 1 iteration
-            if (n_masking_steps > 1 && n_block <= dst) {
-                --n_block;
-                break;
-            }
-        }
+    //         // This check is at the end of the loop since we always have at least 1 iteration
+    //         if (n_masking_steps > 1 && n_block <= dst) {
+    //             --n_block;
+    //             break;
+    //         }
+    //     }
 
-        //if (cute::thread0()) { printf("fence -3\n"); }
+    //     //if (cute::thread0()) { printf("fence -3\n"); }
 
-        // These are the iterations where we don't need masking on S
-        for (; n_block >= dst; --n_block) {
-            Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
-            clear(acc_s);
-            flash::cp_async_wait<0>();
-            __syncthreads();
-            // Advance gV
-            tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
-            flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
-            cute::cp_async_fence();
+    //     // These are the iterations where we don't need masking on S
+    //     for (; n_block >= dst; --n_block) {
+    //         Tensor acc_s = partition_fragment_C(tiled_mma, Shape<Int<kBlockM>, Int<kBlockN>>{});  // (MMA=4, MMA_M, MMA_N)
+    //         clear(acc_s);
+    //         flash::cp_async_wait<0>();
+    //         __syncthreads();
+    //         // Advance gV
+    //         tVgV.data() = tVgV.data() + (-int(kBlockN * params.v_row_stride));
+    //         flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tVgV, tVsV, tKVcKV, tKVpKV);
+    //         cute::cp_async_fence();
 
-            flash::gemm<Kernel_traits::Is_Q_in_regs>(
-                acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
-                smem_thr_copy_Q, smem_thr_copy_K
-            );
+    //         flash::gemm<Kernel_traits::Is_Q_in_regs>(
+    //             acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K,
+    //             smem_thr_copy_Q, smem_thr_copy_K
+    //         );
 
 
-            flash::cp_async_wait<0>();
-            __syncthreads();
-            if (n_block > dst) {
-                // Advance gK
-                tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
-                flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
-                // This cp_async_fence needs to be in the if block, otherwise the synchronization
-                // isn't right and we get race conditions.
-                cute::cp_async_fence();
-            }
+    //         flash::cp_async_wait<0>();
+    //         __syncthreads();
+    //         if (n_block > dst) {
+    //             // Advance gK
+    //             tKgK.data() = tKgK.data() + (-int(kBlockN * params.k_row_stride));
+    //             flash::copy<true, Is_even_K>(gmem_tiled_copy_QKV, tKgK, tKsK, tKVcKV, tKVpKV);
+    //             // This cp_async_fence needs to be in the if block, otherwise the synchronization
+    //             // isn't right and we get race conditions.
+    //             cute::cp_async_fence();
+    //         }
 
-            // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
-            Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
-            softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
+    //         // Reshape acc_s from (MMA=4, MMA_M, MMA_N) to (nrow=(2, MMA_M), ncol=(2, MMA_N))
+    //         Tensor scores = make_tensor(acc_s.data(), flash::convert_layout_acc_rowcol(acc_s.layout()));
+    //         softmax_rescale_o<false>(scores, scores_max, scores_sum, acc_o, params.scale_softmax_log2);
 
-            Tensor rP = flash::convert_type<Element>(scores);
-            // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
-            // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
-            Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_rowcol_Aregs<Kernel_traits::TiledMma>(rP.layout()));
-            uint32_t block_row_idx = reverse_m_block * (kBlockM / 16) + tidx / 32;
-            uint32_t block_col_idx = n_block * (kBlockN / 32);
-            if (Return_softmax) {
-                Tensor tOrP_copy = make_fragment_like(tOrP);
-                cute::copy(tOrP, tOrP_copy);
-                flash::apply_dropout<true>(
-                    tOrP_copy, params.p_dropout_in_uint8_t, seed, offset,
-                    block_row_idx, block_col_idx, kNWarps
-                );
-                flash::write_softmax_to_gmem(tOrP_copy, tPgP, gmem_tiled_copy_P);
-                tPgP.data() = tPgP.data() + (-kBlockN);
-            }
-            if (Is_dropout) {
-                flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
-                                    block_row_idx, block_col_idx, kNWarps);
-            }
-            flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
-        }
+    //         Tensor rP = flash::convert_type<Element>(scores);
+    //         // Reshape rP from (nrow=(2, MMA_M), ncol=(2, MMA_N)) to ((2, 2, 2), MMA_M, MMA_N / 2)
+    //         // if using m16n8k16 or ((2, 2, 1), MMA_M, MMA_N) if using m16n8k8.
+    //         Tensor tOrP = make_tensor(rP.data(), flash::convert_layout_rowcol_Aregs<Kernel_traits::TiledMma>(rP.layout()));
+    //         uint32_t block_row_idx = reverse_m_block * (kBlockM / 16) + tidx / 32;
+    //         uint32_t block_col_idx = n_block * (kBlockN / 32);
+    //         if (Return_softmax) {
+    //             Tensor tOrP_copy = make_fragment_like(tOrP);
+    //             cute::copy(tOrP, tOrP_copy);
+    //             flash::apply_dropout<true>(
+    //                 tOrP_copy, params.p_dropout_in_uint8_t, seed, offset,
+    //                 block_row_idx, block_col_idx, kNWarps
+    //             );
+    //             flash::write_softmax_to_gmem(tOrP_copy, tPgP, gmem_tiled_copy_P);
+    //             tPgP.data() = tPgP.data() + (-kBlockN);
+    //         }
+    //         if (Is_dropout) {
+    //             flash::apply_dropout(tOrP, params.p_dropout_in_uint8_t, seed, offset,
+    //                                 block_row_idx, block_col_idx, kNWarps);
+    //         }
+    //         flash::gemm_A_in_regs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);
+    //     }
 
-        //if (cute::thread0()) { printf("fence 1.875\n"); }
+    //     //if (cute::thread0()) { printf("fence 1.875\n"); }
 
-        /*if (m_block == 0 && tidx == 66) 
-        { 
-            printf("fragment:\n");
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("acc_o:\n");
-            print(acc_o);
-        }*/
-        //if (cute::thread0()) { printf("fence 1.9\n"); }
-        // Epilogue
+    //     /*if (m_block == 0 && tidx == 66) 
+    //     { 
+    //         printf("fragment:\n");
+    //         printf("scores_max:\n");
+    //         print(scores_max);
+    //         printf("scores_sum:\n");
+    //         print(scores_sum);
+    //         printf("acc_o:\n");
+    //         print(acc_o);
+    //     }*/
+    //     //if (cute::thread0()) { printf("fence 1.9\n"); }
+    //     // Epilogue
 
-        // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
-        // Tensor acc_o_rowcol = make_tensor(acc_o.data(), flash::convert_layout_acc_rowcol(acc_o.layout()));
-        // Tensor lse = make_fragment_like(scores_sum);
-        clear(lse);
+    //     // Reshape acc_o from (MMA=4, MMA_M, MMA_K) to (nrow=(2, MMA_M), ncol=(2, MMA_K))
+    //     // Tensor acc_o_rowcol = make_tensor(acc_o.data(), flash::convert_layout_acc_rowcol(acc_o.layout()));
+    //     // Tensor lse = make_fragment_like(scores_sum);
+    //     clear(lse);
 
-        #pragma unroll
-        for (int mi = 0; mi < size<0>(acc_o_rowcol); ++mi) {
-            float sum = scores_sum(mi);
-            float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
-            lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
-            float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
-            #pragma unroll
-            for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
-        }
-        /*
-        __threadfence();
-        atomicAnd(&CompleteMask, 0);
-        if (tidx == 0) {
-            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
-        }
-        __syncthreads();
-        if (m_block == 0 && tidx == 66) 
-        { 
-            printf("fragment:\n");
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("acc_o:\n");
-            print(acc_o);
-        }*/
+    //     #pragma unroll
+    //     for (int mi = 0; mi < size<0>(acc_o_rowcol); ++mi) {
+    //         float sum = scores_sum(mi);
+    //         float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
+    //         lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
+    //         float scale = !Is_dropout ? inv_sum : inv_sum * params.rp_dropout;
+    //         #pragma unroll
+    //         for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scale; }
+    //     }
+    //     /*
+    //     __threadfence();
+    //     atomicAnd(&CompleteMask, 0);
+    //     if (tidx == 0) {
+    //         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
+    //     }
+    //     __syncthreads();
+    //     if (m_block == 0 && tidx == 66) 
+    //     { 
+    //         printf("fragment:\n");
+    //         printf("scores_max:\n");
+    //         print(scores_max);
+    //         printf("scores_sum:\n");
+    //         print(scores_sum);
+    //         printf("acc_o:\n");
+    //         print(acc_o);
+    //     }*/
 
-        //if (cute::thread0()) { printf("fence 2\n"); }
+    //     //if (cute::thread0()) { printf("fence 2\n"); }
 
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        //Bae: we should sync for the whole token. In flash attention, one block is assigned to one SM. So the sync range is a few block in a few SMs.
-        //     __threadfence() sync for grid level. Maybe it is too wide because it will wait all the blocks, 
-        //     and the whole grid maybe not on the device simultaneously because it is too large.
-        //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
-        //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
+    //     //Bae: we should sync for the whole token. In flash attention, one block is assigned to one SM. So the sync range is a few block in a few SMs.
+    //     //     __threadfence() sync for grid level. Maybe it is too wide because it will wait all the blocks, 
+    //     //     and the whole grid maybe not on the device simultaneously because it is too large.
+    //     //     But I don't know how to sync with some blocks, maybe we can point out which SM to assign the block by CUDA APIs.
+    //     //     Or we can use CUDA cooperative groups API. (seems only supported by Hopper arch?)
         
-        //__threadfence();
-        //atomicAnd(&CompleteMask, 0);
+    //     //__threadfence();
+    //     //atomicAnd(&CompleteMask, 0);
 
-        /**/
-        if (tidx == 0) {
-            while(atomicCAS(&CompleteMask[bidh][bidb][m_block], 0, 0) != 1);
-        }
-        __syncthreads();
+    //     /**/
+    //     if (tidx == 0) {
+    //         while(atomicCAS(&CompleteMask[bidh][bidb][m_block], 0, 0) != 1);
+    //     }
+    //     __syncthreads();
         
-        /*__threadfence();
-        atomicAnd(&CompleteMask, 0);
-        if (tidx == 0) {
-            while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
-        }
-        __syncthreads();*/
-        //if (cute::thread0()) { printf("fence 3\n"); }
+    //     /*__threadfence();
+    //     atomicAnd(&CompleteMask, 0);
+    //     if (tidx == 0) {
+    //         while ((atomicOr(&CompleteMask, 1ULL << block_id)) != SollMask);
+    //     }
+    //     __syncthreads();*/
+    //     //if (cute::thread0()) { printf("fence 3\n"); }
 
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        //Bae: Then we should merge two fragments when m_block < N/2, fragment 1 to d/2-f(m_block) stored at shared memory, 
-        //     d/2-f(m_block) to d-f(m_block) stored at global memory. Fragment in glb memmory will be load to shared memmory, 
-        //     after merging the result will be load to global memory (the same place as where stored fragment). 
+    //     //Bae: Then we should merge two fragments when m_block < N/2, fragment 1 to d/2-f(m_block) stored at shared memory, 
+    //     //     d/2-f(m_block) to d-f(m_block) stored at global memory. Fragment in glb memmory will be load to shared memmory, 
+    //     //     after merging the result will be load to global memory (the same place as where stored fragment). 
             
-        //Bae: fragment 1 to d/2-f(m_block) stored at sO, d/2-f(m_block) to d-f(m_block) stored at global mem somewhere, we need to recompute pointers
-        const index_t row_offset_frag_scores_max = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
-        const index_t row_offset_frag_scores_sum = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
-        gscores_max = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_max_ptr) +row_offset_frag_scores_max),
-                                Shape<Int<kBlockM>>{}, Stride<_1>{});
-        gscores_sum = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_sum_ptr) +row_offset_frag_scores_sum),
-                                Shape<Int<kBlockM>>{}, Stride<_1>{});
+    //     //Bae: fragment 1 to d/2-f(m_block) stored at sO, d/2-f(m_block) to d-f(m_block) stored at global mem somewhere, we need to recompute pointers
+    //     const index_t row_offset_frag_scores_max = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
+    //     const index_t row_offset_frag_scores_sum = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
+    //     gscores_max = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_max_ptr) +row_offset_frag_scores_max),
+    //                             Shape<Int<kBlockM>>{}, Stride<_1>{});
+    //     gscores_sum = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.scores_sum_ptr) +row_offset_frag_scores_sum),
+    //                             Shape<Int<kBlockM>>{}, Stride<_1>{});
         
-        const index_t row_offset_o_frag = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
-            + reverse_m_block * kBlockM * params.o_row_stride + bidh * params.o_head_stride;
-        Tensor gOf = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.o_ptr) + row_offset_o_frag),
-                            Shape<Int<kBlockM>, Int<kHeadDim>>{},
-                            make_stride(params.o_row_stride, _1{}));
-        const index_t row_offset_lse_frag = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
-        gLSE = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.softmax_lse_ptr) + row_offset_lse_frag),
-                            Shape<Int<kBlockM>>{}, Stride<_1>{});
-        //Bae: reload fragment from g0f to shared mem sOf (O is the same size as Q, so the copy operation is similar), stores at sQ address
-        //Tensor sOf = make_tensor(sK.data() + (Kernel_traits::Share_Q_K_smem ? size(sK) : 0), typename Kernel_traits::SmemLayoutO{});    // (SMEM_M,SMEM_N)
-        Tensor sOf = make_tensor(sQ.data(), typename Kernel_traits::SmemLayoutO{});    // (SMEM_M,SMEM_N)
+    //     const index_t row_offset_o_frag = binfo.q_offset(params.o_batch_stride, params.o_row_stride, bidb)
+    //         + reverse_m_block * kBlockM * params.o_row_stride + bidh * params.o_head_stride;
+    //     Tensor gOf = make_tensor(make_gmem_ptr(reinterpret_cast<Element *>(params.o_ptr) + row_offset_o_frag),
+    //                         Shape<Int<kBlockM>, Int<kHeadDim>>{},
+    //                         make_stride(params.o_row_stride, _1{}));
+    //     const index_t row_offset_lse_frag = (bidb * params.h + bidh) * params.seqlen_q + reverse_m_block * kBlockM;
+    //     gLSE = make_tensor(make_gmem_ptr(reinterpret_cast<ElementAccum *>(params.softmax_lse_ptr) + row_offset_lse_frag),
+    //                         Shape<Int<kBlockM>>{}, Stride<_1>{});
+    //     //Bae: reload fragment from g0f to shared mem sOf (O is the same size as Q, so the copy operation is similar), stores at sQ address
+    //     //Tensor sOf = make_tensor(sK.data() + (Kernel_traits::Share_Q_K_smem ? size(sK) : 0), typename Kernel_traits::SmemLayoutO{});    // (SMEM_M,SMEM_N)
+    //     Tensor sOf = make_tensor(sQ.data(), typename Kernel_traits::SmemLayoutO{});    // (SMEM_M,SMEM_N)
 
-        //typename Kernel_traits::GmemTiledCopyO gmem_tiled_copy_O;
-        gmem_thr_copy_O = gmem_tiled_copy_O.get_thread_slice(tidx);
+    //     //typename Kernel_traits::GmemTiledCopyO gmem_tiled_copy_O;
+    //     gmem_thr_copy_O = gmem_tiled_copy_O.get_thread_slice(tidx);
 
-        Tensor tOgOf = gmem_thr_copy_O.partition_S(gOf);
-        Tensor tOsOf = gmem_thr_copy_O.partition_D(sOf);
+    //     Tensor tOgOf = gmem_thr_copy_O.partition_S(gOf);
+    //     Tensor tOsOf = gmem_thr_copy_O.partition_D(sOf);
         
-        Tensor tOrOf = make_tensor<Element>(shape(tOgOf));
-        __syncthreads();
+    //     Tensor tOrOf = make_tensor<Element>(shape(tOgOf));
+    //     __syncthreads();
 
-        // PREDICATES
+    //     // PREDICATES
 
-        // Construct identity layout 
-        Tensor cOf = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
+    //     // Construct identity layout 
+    //     Tensor cOf = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
 
-        // Repeat the partitioning with identity layouts
-        Tensor tOcOf = gmem_thr_copy_O.partition_S(cOf);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
+    //     // Repeat the partitioning with identity layouts
+    //     Tensor tOcOf = gmem_thr_copy_O.partition_S(cOf);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
 
-        // Allocate predicate tensors for k
-        Tensor tOpOf = make_tensor<bool>(make_shape(size<2>(tOsOf)));
+    //     // Allocate predicate tensors for k
+    //     Tensor tOpOf = make_tensor<bool>(make_shape(size<2>(tOsOf)));
 
-        // Set predicates for k bounds
-        if (!Is_even_K) {
-            #pragma unroll
-            for (int k = 0; k < size(tOpOf); ++k) { tOpOf(k) = get<1>(tOcOf(0, 0, k)) < params.d; }
-        }
+    //     // Set predicates for k bounds
+    //     if (!Is_even_K) {
+    //         #pragma unroll
+    //         for (int k = 0; k < size(tOpOf); ++k) { tOpOf(k) = get<1>(tOcOf(0, 0, k)) < params.d; }
+    //     }
 
-        //if (cute::thread0()) { printf("fence 5\n"); }
+    //     //if (cute::thread0()) { printf("fence 5\n"); }
 
-        // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
-        flash::copy<false, Is_even_K, false, false>(
-            gmem_tiled_copy_O, tOgOf, tOrOf, tOcOf, tOpOf, binfo.actual_seqlen_q - reverse_m_block * kBlockM);
-        __syncthreads(); 
-        cute::copy(gmem_tiled_copy_O, tOrOf, tOsOf);
-        __syncthreads(); 
-        Tensor rOf = make_fragment_like(acc_o);
+    //     // We don't need to clear the sQ smem tiles since we'll only write out the valid outputs
+    //     flash::copy<false, Is_even_K, false, false>(
+    //         gmem_tiled_copy_O, tOgOf, tOrOf, tOcOf, tOpOf, binfo.actual_seqlen_q - reverse_m_block * kBlockM);
+    //     __syncthreads(); 
+    //     cute::copy(gmem_tiled_copy_O, tOrOf, tOsOf);
+    //     __syncthreads(); 
+    //     Tensor rOf = make_fragment_like(acc_o);
 
-        Tensor taccOrOf = smem_thr_copy_O.retile_D(rOf);        // ((Atom,AtomNum), MMA_M, MMA_N)
-        Tensor taccOsOf = smem_thr_copy_O.partition_S(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
+    //     Tensor taccOrOf = smem_thr_copy_O.retile_D(rOf);        // ((Atom,AtomNum), MMA_M, MMA_N)
+    //     Tensor taccOsOf = smem_thr_copy_O.partition_S(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
 
-        // sO has the same size as sQ, so we don't need to sync here.
-        if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
+    //     // sO has the same size as sQ, so we don't need to sync here.
+    //     if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
 
-        //if (cute::thread0()) { printf("fence 6\n"); }
+    //     //if (cute::thread0()) { printf("fence 6\n"); }
 
-        cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
-        /*if (m_block == 0 && tidx == 66) 
-        { 
-            printf("fence 6.6\n");
-            printf("tOgOf:\n");
-            print(tOgOf);
-            printf("tOrOf:\n");
-            print(tOrOf);
-            printf("tOsOf:\n");
-            print(tOsOf);
-            printf("taccOsOf:\n");
-            print(taccOsOf);
-            printf("taccOrOf:\n");
-            print(taccOrOf);
-        }*/
-        //Bae: We need to store and load score_max and score_sum. So new memory should be assign to score_max and score_sum.
-        //     For each block, the size is KblockM * 1.
+    //     cute::copy(smem_tiled_copy_O, taccOsOf, taccOrOf);
+    //     /*if (m_block == 0 && tidx == 66) 
+    //     { 
+    //         printf("fence 6.6\n");
+    //         printf("tOgOf:\n");
+    //         print(tOgOf);
+    //         printf("tOrOf:\n");
+    //         print(tOrOf);
+    //         printf("tOsOf:\n");
+    //         print(tOsOf);
+    //         printf("taccOsOf:\n");
+    //         print(taccOsOf);
+    //         printf("taccOrOf:\n");
+    //         print(taccOrOf);
+    //     }*/
+    //     //Bae: We need to store and load score_max and score_sum. So new memory should be assign to score_max and score_sum.
+    //     //     For each block, the size is KblockM * 1.
 
-        Tensor fragment_scores_max = make_tensor<ElementAccum>(Shape<Int<2 * size<1>(acc_o)>>{});
-        Tensor fragment_scores_sum = make_fragment_like(fragment_scores_max);
+    //     Tensor fragment_scores_max = make_tensor<ElementAccum>(Shape<Int<2 * size<1>(acc_o)>>{});
+    //     Tensor fragment_scores_sum = make_fragment_like(fragment_scores_max);
 
-        caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
-        taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
-        //static_assert(decltype(size<0>(taccOcO))::value == 4);
-        // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
-        taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
-        //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
-        /*if (m_block == 0 && tidx == 66) {
-            printf("get<1>(taccOcO_row(0))=%d\n", get<1>(taccOcO_row(0)));
-            printf("size(taccOcO_row(0))=%d\n", size(taccOcO_row(0)));
-            printf("rank(taccOcO_row(0))=%d\n", rank(taccOcO_row(0)));
-            printf("size(taccOcO_row)=%d\n", size(taccOcO_row));
-            printf("rank(taccOcO_row)=%d\n", rank(taccOcO_row));
-            //print(taccOcO_row);
-        }*/
-        //if (get<1>(taccOcO_row(0)) == 0) {
-            #pragma unroll
-            for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(mi));
-                /*if (tidx == 66) { 
-                    printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row, mi);
-                }*/
-                if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
-                    fragment_scores_max(mi) = gscores_max(row); 
-                    fragment_scores_sum(mi) = gscores_sum(row); 
-                }
-            }
-        //}
+    //     caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
+    //     taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
+    //     //static_assert(decltype(size<0>(taccOcO))::value == 4);
+    //     // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
+    //     taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
+    //     //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
+    //     /*if (m_block == 0 && tidx == 66) {
+    //         printf("get<1>(taccOcO_row(0))=%d\n", get<1>(taccOcO_row(0)));
+    //         printf("size(taccOcO_row(0))=%d\n", size(taccOcO_row(0)));
+    //         printf("rank(taccOcO_row(0))=%d\n", rank(taccOcO_row(0)));
+    //         printf("size(taccOcO_row)=%d\n", size(taccOcO_row));
+    //         printf("rank(taccOcO_row)=%d\n", rank(taccOcO_row));
+    //         //print(taccOcO_row);
+    //     }*/
+    //     //if (get<1>(taccOcO_row(0)) == 0) {
+    //         #pragma unroll
+    //         for (int mi = 0; mi < size(lse); ++mi) {
+    //             const int row = get<0>(taccOcO_row(mi));
+    //             /*if (tidx == 66) { 
+    //                 printf("reverse_m_block=%d, frag_gscore_max row=%d, mi=%d\n", reverse_m_block, row, mi);
+    //             }*/
+    //             if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) {
+    //                 fragment_scores_max(mi) = gscores_max(row); 
+    //                 fragment_scores_sum(mi) = gscores_sum(row); 
+    //             }
+    //         }
+    //     //}
 
-        //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
+    //     //Bae: Merge. Result stores at acc_o, scores_max, scores_sum
 
-        /*if (m_block == 0 && tidx == 66) 
-        { 
-            printf("fence 7\n");
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("acc_o:\n");
-            print(acc_o);
-            printf("fragment_scores_max:\n");
-            print(fragment_scores_max);
-            printf("fragment_scores_sum:\n");
-            print(fragment_scores_sum);
-            printf("rOf:\n");
-            print(rOf);
-        }*/
-        softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf, params.scale_softmax_log2);
+    //     /*if (m_block == 0 && tidx == 66) 
+    //     { 
+    //         printf("fence 7\n");
+    //         printf("scores_max:\n");
+    //         print(scores_max);
+    //         printf("scores_sum:\n");
+    //         print(scores_sum);
+    //         printf("acc_o:\n");
+    //         print(acc_o);
+    //         printf("fragment_scores_max:\n");
+    //         print(fragment_scores_max);
+    //         printf("fragment_scores_sum:\n");
+    //         print(fragment_scores_sum);
+    //         printf("rOf:\n");
+    //         print(rOf);
+    //     }*/
+    //     softmax_merge_o<false>(scores_max, scores_sum, fragment_scores_max, fragment_scores_sum, acc_o, rOf, params.scale_softmax_log2);
 
-        /*if (m_block == 0 && tidx == 66) 
-        { 
-            printf("fence 7.5 merge result\n");
-            printf("scores_max:\n");
-            print(scores_max);
-            printf("scores_sum:\n");
-            print(scores_sum);
-            printf("rOf:\n");
-            print(rOf);         
-        }*/
+    //     /*if (m_block == 0 && tidx == 66) 
+    //     { 
+    //         printf("fence 7.5 merge result\n");
+    //         printf("scores_max:\n");
+    //         print(scores_max);
+    //         printf("scores_sum:\n");
+    //         print(scores_sum);
+    //         printf("rOf:\n");
+    //         print(rOf);         
+    //     }*/
 
-        //Bae: Re-compute LSE
+    //     //Bae: Re-compute LSE
 
-        Tensor rOf_rowcol = make_tensor(rOf.data(), flash::convert_layout_acc_rowcol(rOf.layout()));
-        //Tensor lse = make_fragment_like(scores_sum);
-        clear(lse);
+    //     Tensor rOf_rowcol = make_tensor(rOf.data(), flash::convert_layout_acc_rowcol(rOf.layout()));
+    //     //Tensor lse = make_fragment_like(scores_sum);
+    //     clear(lse);
 
-        #pragma unroll
-        for (int mi = 0; mi < size<0>(rOf_rowcol); ++mi) {
-            float sum = scores_sum(mi);
-            //float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
-            lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
-        }
+    //     #pragma unroll
+    //     for (int mi = 0; mi < size<0>(rOf_rowcol); ++mi) {
+    //         float sum = scores_sum(mi);
+    //         //float inv_sum = (sum == 0.f || sum != sum) ? 1.f : 1.f / sum;
+    //         lse(mi) = (sum == 0.f || sum != sum) ? INFINITY : scores_max(mi) * params.scale_softmax + __logf(sum);
+    //     }
 
-        //Bae: load final result to glb_mem
+    //     //Bae: load final result to glb_mem
 
-        //if (cute::thread0()) { printf("fence 8\n"); }
+    //     //if (cute::thread0()) { printf("fence 8\n"); }
 
-        // sO has the same size as sQ, so we don't need to sync here.
+    //     // sO has the same size as sQ, so we don't need to sync here.
 
-        Tensor rOf_store = flash::convert_type<Element>(rOf);
+    //     Tensor rOf_store = flash::convert_type<Element>(rOf);
 
-        Tensor taccOrOf_store = smem_thr_copy_O.retile_S(rOf_store);        // ((Atom,AtomNum), MMA_M, MMA_N)
-        Tensor taccOsOf_store = smem_thr_copy_O.partition_D(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
+    //     Tensor taccOrOf_store = smem_thr_copy_O.retile_S(rOf_store);        // ((Atom,AtomNum), MMA_M, MMA_N)
+    //     Tensor taccOsOf_store = smem_thr_copy_O.partition_D(sOf);     // ((Atom,AtomNum),PIPE_M,PIPE_N)
 
-        if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
+    //     if (Kernel_traits::Share_Q_K_smem) { __syncthreads(); }
 
-        cute::copy(smem_tiled_copy_O, taccOrOf_store, taccOsOf_store);
+    //     cute::copy(smem_tiled_copy_O, taccOrOf_store, taccOsOf_store);
 
-        Tensor tOgOf_store = gmem_thr_copy_O.partition_D(gOf);
-        Tensor tOsOf_store = gmem_thr_copy_O.partition_S(sOf);
-        __syncthreads();
-        Tensor tOrOf_store = make_tensor<Element>(shape(tOgOf_store));
+    //     Tensor tOgOf_store = gmem_thr_copy_O.partition_D(gOf);
+    //     Tensor tOsOf_store = gmem_thr_copy_O.partition_S(sOf);
+    //     __syncthreads();
+    //     Tensor tOrOf_store = make_tensor<Element>(shape(tOgOf_store));
 
-        cute::copy(gmem_tiled_copy_O, tOsOf_store, tOrOf_store);
+    //     cute::copy(gmem_tiled_copy_O, tOsOf_store, tOrOf_store);
 
-        //Tensor caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
-        //Tensor taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
-        //static_assert(decltype(size<0>(taccOcO))::value == 4);
-        // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
-        //Tensor taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
-        //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
-        //if (get<1>(taccOcO_row(0)) == 0) {
-            #pragma unroll
-            for (int mi = 0; mi < size(lse); ++mi) {
-                const int row = get<0>(taccOcO_row(mi));
-                if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { 
-                    gLSE(row) = lse(mi); 
-                }
-            }
-        //}
+    //     //Tensor caccO = make_identity_tensor(Shape<Int<kBlockM>, Int<kHeadDim>>{});    // (BLK_M,BLK_K) -> (blk_m,blk_k)
+    //     //Tensor taccOcO = thr_mma.partition_C(caccO);                           // (MMA,MMA_M,MMA_K)
+    //     //static_assert(decltype(size<0>(taccOcO))::value == 4);
+    //     // Convert to ((2, 2), MMA_M, MMA_K) then take only the row indices.
+    //     //Tensor taccOcO_row = logical_divide(taccOcO, Shape<_2>{})(make_coord(0, _), _, 0);
+    //     //CUTE_STATIC_ASSERT_V(size(lse) == size(taccOcO_row));                     // MMA_M
+    //     //if (get<1>(taccOcO_row(0)) == 0) {
+    //         #pragma unroll
+    //         for (int mi = 0; mi < size(lse); ++mi) {
+    //             const int row = get<0>(taccOcO_row(mi));
+    //             if (row < binfo.actual_seqlen_q - reverse_m_block * kBlockM) { 
+    //                 gLSE(row) = lse(mi); 
+    //             }
+    //         }
+    //     //}
 
-        //if (cute::thread0()) { printf("fence 9\n"); }
+    //     //if (cute::thread0()) { printf("fence 9\n"); }
 
-        // Construct identity layout for sO
-        Tensor cOf_store = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
-        // Repeat the partitioning with identity layouts
-        Tensor tOcOf_store = gmem_thr_copy_O.partition_D(cOf_store);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
-        // Allocate predicate tensors for k
-        Tensor tOpOf_store = make_tensor<bool>(make_shape(size<2>(tOgOf_store)));
+    //     // Construct identity layout for sO
+    //     Tensor cOf_store = make_identity_tensor(make_shape(size<0>(sOf), size<1>(sOf)));    // (BLK_M,BLK_K) -> (blk_m,blk_k)
+    //     // Repeat the partitioning with identity layouts
+    //     Tensor tOcOf_store = gmem_thr_copy_O.partition_D(cOf_store);       // (ACPY,ACPY_M,ACPY_K) -> (blk_m,blk_k)
+    //     // Allocate predicate tensors for k
+    //     Tensor tOpOf_store = make_tensor<bool>(make_shape(size<2>(tOgOf_store)));
         
-        if (!Is_even_K) {
-            #pragma unroll
-            for (int k = 0; k < size(tOpOf_store); ++k) { tOpOf_store(k) = get<1>(tOcOf_store(0, 0, k)) < params.d; }
-        }
-        // Clear_OOB_K must be false since we don't want to write zeros to gmem
-        flash::copy<false, Is_even_K, false, false>(
-            gmem_tiled_copy_O, tOrOf_store, tOgOf_store, tOcOf_store, tOpOf_store, binfo.actual_seqlen_q - reverse_m_block * kBlockM
-        );
-        /*if (m_block == 0 && tidx == 66) 
-        { 
-            printf("fence 9.9\n");
-            printf("tOgOf_store:\n");
-            print(tOgOf_store);
-            printf("tOrOf_store:\n");
-            print(tOrOf_store);
-            printf("tOsOf:\n");
-            print(tOsOf);
-            printf("taccOrOf_store:\n");
-            print(taccOrOf_store);
-            printf("taccOsOf_store:\n");
-            print(taccOsOf_store);
-        }*/
-    }
+    //     if (!Is_even_K) {
+    //         #pragma unroll
+    //         for (int k = 0; k < size(tOpOf_store); ++k) { tOpOf_store(k) = get<1>(tOcOf_store(0, 0, k)) < params.d; }
+    //     }
+    //     // Clear_OOB_K must be false since we don't want to write zeros to gmem
+    //     flash::copy<false, Is_even_K, false, false>(
+    //         gmem_tiled_copy_O, tOrOf_store, tOgOf_store, tOcOf_store, tOpOf_store, binfo.actual_seqlen_q - reverse_m_block * kBlockM
+    //     );
+    //     /*if (m_block == 0 && tidx == 66) 
+    //     { 
+    //         printf("fence 9.9\n");
+    //         printf("tOgOf_store:\n");
+    //         print(tOgOf_store);
+    //         printf("tOrOf_store:\n");
+    //         print(tOrOf_store);
+    //         printf("tOsOf:\n");
+    //         print(tOsOf);
+    //         printf("taccOrOf_store:\n");
+    //         print(taccOrOf_store);
+    //         printf("taccOsOf_store:\n");
+    //         print(taccOsOf_store);
+    //     }*/
+    // }
     /**/
     uint64_t start = clock64();
     uint64_t end = start + (uint64_t)(1000000000);
