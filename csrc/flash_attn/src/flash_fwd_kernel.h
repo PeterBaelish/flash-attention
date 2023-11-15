@@ -12,7 +12,7 @@
 #include <cutlass/array.h>
 #include <cutlass/numeric_types.h>
 #include <cutlass/numeric_conversion.h>
-
+#include <chrono>
 #include "block_info.h"
 #include "kernel_traits.h"
 #include "utils.h"
@@ -1856,8 +1856,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     }
     /**/
     //uint64_t end_time = GlobalTimer64();
-    auto now = std::chrono::high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
+    now = std::chrono::high_resolution_clock::now();
+    duration = now.time_since_epoch();
     auto end_time = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
     if(tidx == 0) {
         printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
