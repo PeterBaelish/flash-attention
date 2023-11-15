@@ -679,25 +679,25 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     uint32_t sm_id = GetSMID();
 
 
-    using Element = typename Kernel_traits::Element;
-    using ElementAccum = typename Kernel_traits::ElementAccum;
-    using index_t = typename Kernel_traits::index_t;
+    // using Element = typename Kernel_traits::Element;
+    // using ElementAccum = typename Kernel_traits::ElementAccum;
+    // using index_t = typename Kernel_traits::index_t;
 
-    // Shared memory.
-    extern __shared__ char smem_[];
+    // // Shared memory.
+    // extern __shared__ char smem_[];
 
-    // The thread index.
-    const int tidx = threadIdx.x;
-    // The global block index.
-    const int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
+    // // The thread index.
+    // const int tidx = threadIdx.x;
+    // // The global block index.
+    // const int block_id = blockIdx.x + blockIdx.y * gridDim.x + gridDim.x * gridDim.y * blockIdx.z;
 
-    constexpr int kBlockM = Kernel_traits::kBlockM;
-    constexpr int kBlockN = Kernel_traits::kBlockN;
-    constexpr int kHeadDim = Kernel_traits::kHeadDim;
-    constexpr int kNWarps = Kernel_traits::kNWarps;
-    constexpr int MMA_M = kBlockM / decltype(size<0>(typename Kernel_traits::TiledMma::TiledShape_MNK{}))::value;
+    // constexpr int kBlockM = Kernel_traits::kBlockM;
+    // constexpr int kBlockN = Kernel_traits::kBlockN;
+    // constexpr int kHeadDim = Kernel_traits::kHeadDim;
+    // constexpr int kNWarps = Kernel_traits::kNWarps;
+    // constexpr int MMA_M = kBlockM / decltype(size<0>(typename Kernel_traits::TiledMma::TiledShape_MNK{}))::value;
 
-    const BlockInfo<!Is_even_N> binfo(params, bidb);
+    // const BlockInfo<!Is_even_N> binfo(params, bidb);
 
     /**/
     // if (m_block + 1 > (((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) / 2) + 1 && threadIdx.x == 0) {
