@@ -446,7 +446,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                         libsmctrl_set_stream_mask(streams[i], ~mask);
                         mask <<= 6;
                     }
-
+                    cudaDeviceSynchronize();
                     //#pragma unroll
                     for (int i = 0; i < b; i++) {
                         for (int j = 0; j < h; j++) {
