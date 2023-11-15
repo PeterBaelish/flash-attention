@@ -1860,7 +1860,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
             }
     }
     uint64_t end_time = GlobalTimer64();
-    if(tidx == 0) {
+    if(threadIdx.x == 0) {
         printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
             blockIdx.x, bidb, bidh, sm_id, start_time, end_time, end_time-start_time);
     }
