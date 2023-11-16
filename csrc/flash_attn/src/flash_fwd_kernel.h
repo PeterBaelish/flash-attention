@@ -613,7 +613,14 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
     flash::copy</*Is_even_MN=*/false, Is_even_K, /*Clear_OOB_MN=*/false, /*Clear_OOB_K=*/false>(
         gmem_tiled_copy_O, tOrO, tOgO, tOcO, tOpO, binfo.actual_seqlen_q - m_block * kBlockM
     );
-}
+    uint64_t start = clock64();
+    uint64_t end = start + (uint64_t)(1000000000);
+    while(clock64() < end) {
+            float dummy = 0.0;
+            for(int i=0;i<1000;i++){
+                    dummy += tanf(dummy) + logf(dummy);
+            }
+    }
 
 __device__ inline uint64_t GlobalTimer64(void) {
   // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap
