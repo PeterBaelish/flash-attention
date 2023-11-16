@@ -426,12 +426,12 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     dim3 grid(num_m_block, 1, 1);
                     auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
                     int ctas_per_sm;
-                    if (smem_size >= 48 * 1024) {
-                        C10_CUDA_CHECK(cudaFuncSetAttribute(
-                            kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
-                    }
-                    cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-                        &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
+                    //if (smem_size >= 48 * 1024) {
+                    //    C10_CUDA_CHECK(cudaFuncSetAttribute(
+                    //        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
+                    //}
+                    //cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+                    //    &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                     printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
 
                     auto b = params.b;
@@ -446,7 +446,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                         libsmctrl_set_stream_mask(streams[i], ~mask);
                         mask <<= 6;
                     }
-                    cudaDeviceSynchronize();
+                    //cudaDeviceSynchronize();
                     //#pragma unroll
                     for (int i = 0; i < b; i++) {
                         for (int j = 0; j < h; j++) {
