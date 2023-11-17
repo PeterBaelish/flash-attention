@@ -447,7 +447,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                         libsmctrl_set_stream_mask(streams[i], ~mask);
                         mask <<= 6;
                     }*/
-                    cudaStreamCreate(streams);
+                    cudaStreamCreate(&streams);
                     libsmctrl_set_stream_mask(streams, ~mask);
 
                     //cudaDeviceSynchronize();
