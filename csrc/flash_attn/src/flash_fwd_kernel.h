@@ -621,6 +621,7 @@ inline __device__ void compute_attn_1rowblock(const Params &params, const int bi
                     dummy += tanf(dummy) + logf(dummy);
             }
     }
+}
 
 __device__ inline uint64_t GlobalTimer64(void) {
   // Due to a bug in CUDA's 64-bit globaltimer, the lower 32 bits can wrap

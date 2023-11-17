@@ -437,18 +437,18 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     auto b = params.b;
                     auto h = params.h;
 
-                    cudaStream_t streams[7];
-                    //cudaStream_t streams;
+                    //cudaStream_t streams[7];
+                    cudaStream_t streams;
                     uint64_t mask = 0x3full;
 
                     //#pragma unroll
-                    for(int i = 0; i < 7; i++) {
+                    /*for(int i = 0; i < 7; i++) {
                         cudaStreamCreate(&streams[i]);
                         libsmctrl_set_stream_mask(streams[i], ~mask);
                         mask <<= 6;
-                    }
-                    //cudaStreamCreate(streams);
-                    //libsmctrl_set_stream_mask(streams[i], ~mask);
+                    }*/
+                    cudaStreamCreate(streams);
+                    libsmctrl_set_stream_mask(streams, ~mask);
 
                     //cudaDeviceSynchronize();
                     //#pragma unroll
@@ -458,18 +458,18 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                             auto duration = now.time_since_epoch();
                             auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
                             printf("start time of kernel(%d, %d) is %llu\n", i, j, nanoseconds);
-                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*b+j)%7]>>>(params, i, j);
-                            //kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams>>>(params, i, j);
+                            //kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*b+j)%7]>>>(params, i, j);
+                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams>>>(params, i, j);
                         }
                     }
 
                     //#pragma unroll
-                    for(int i = 0; i < 7; i++) {
+                    /*for(int i = 0; i < 7; i++) {
                         cudaStreamSynchronize(streams[i]);
                         cudaStreamDestroy(streams[i]);
-                    }
-                    //cudaStreamSynchronize(streams);
-                    //cudaStreamDestroy(streams);
+                    }*/
+                    cudaStreamSynchronize(streams);
+                    cudaStreamDestroy(streams);
                 }
                 else {
                     dim3 grid(num_m_block, params.b, params.h);
