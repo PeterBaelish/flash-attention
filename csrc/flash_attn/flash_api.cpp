@@ -334,7 +334,7 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
     //printf("b\n");
 
     run_mha_fwd(params, stream);
-    cudaStreamSynchronize(stream);
+    //cudaStreamSynchronize(stream);
     //printf("d\n");
 
     at::Tensor out_padded = out;

@@ -457,8 +457,8 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     }
 
                     for(int i = 0; i < 7; i++) {
-                        cudaStreamSynchronize(streams[i]);
-                        cudaStreamDestroy(streams[i]);
+                        //cudaStreamSynchronize(streams[i]);
+                        //cudaStreamDestroy(streams[i]);
                     }
                 }
                 else {
@@ -473,6 +473,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     //    &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                     printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
                     kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params, 0, 0);
+					//cudaStreamSynchronize(stream);
                 }
                 //C10_CUDA_KERNEL_LAUNCH_CHECK();  
                 //printf("yyy\n");
