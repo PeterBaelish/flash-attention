@@ -279,7 +279,7 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
 
     // Otherwise the kernel will be launched from cuda:0 device
     // Cast to char to avoid compiler warning about narrowing
-    //at::cuda::CUDAGuard device_guard{(char)q.get_device()};
+    at::cuda::CUDAGuard device_guard{(char)q.get_device()};
 
     auto opts = q.options();
 
@@ -320,20 +320,21 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
     // Forward kernel will populate memory with the seed and offset.
     params.rng_state = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
 
-    /*if (p_dropout > 0.0)  {
+    if (p_dropout > 0.0)  {
         auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
             gen_, at::cuda::detail::getDefaultCUDAGenerator());
         // See Note [Acquire lock when using random generators]
         std::lock_guard<std::mutex> lock(gen->mutex_);
         params.philox_args = gen->philox_cuda_state(counter_offset);
-    }*/
+    }
 
-    auto stream = at::cuda::getCurrentCUDAStream().stream();
-
+    //auto stream = at::cuda::getCurrentCUDAStream().stream();
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
     //printf("b\n");
 
     run_mha_fwd(params, stream);
-
+    cudaStreamSynchronize(stream);
     //printf("d\n");
 
     at::Tensor out_padded = out;
