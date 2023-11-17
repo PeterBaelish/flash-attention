@@ -385,10 +385,10 @@ class FlashAttnFunc(torch.autograd.Function):
             causal=causal,
             return_softmax=return_softmax and dropout_p > 0,
         )
-        #ctx.save_for_backward(q, k, v, out_padded, softmax_lse, rng_state)
-        #ctx.dropout_p = dropout_p
-        #ctx.softmax_scale = softmax_scale
-        #ctx.causal = causal
+        ctx.save_for_backward(q, k, v, out_padded, softmax_lse, rng_state)
+        ctx.dropout_p = dropout_p
+        ctx.softmax_scale = softmax_scale
+        ctx.causal = causal
         return out if not return_softmax else (out, softmax_lse, S_dmask)
 
     @staticmethod
