@@ -457,8 +457,8 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     }
 
                     for(int i = 0; i < 7; i++) {
-                        //cudaStreamSynchronize(streams[i]);
-                        //cudaStreamDestroy(streams[i]);
+                        cudaStreamSynchronize(streams[i]);
+                        cudaStreamDestroy(streams[i]);
                     }
                 }
                 else {
