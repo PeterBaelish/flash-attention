@@ -318,7 +318,7 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
     auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     auto rng_state = torch::empty({2}, options.dtype(torch::kInt64));
     // Forward kernel will populate memory with the seed and offset.
-    //params.rng_state = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
+    params.rng_state = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
 
     /*if (p_dropout > 0.0)  {
         auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
