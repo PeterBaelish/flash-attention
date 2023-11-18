@@ -25,46 +25,46 @@ using namespace cute;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <int MMA_M,
-          class... Args,
-          class TiledMMA>
-CUTE_HOST_DEVICE
-auto
-make_tiled_copy_A_warpcontiguousM(Copy_Atom<Args...> const& copy_atom,
-                                 TiledMMA           const& tiled_mma) {
-    using TileShape_MNK = typename TiledMMA::TiledShape_MNK;
-    using AtomShape_MNK = typename TiledMMA::AtomShape_MNK;
-    constexpr int AtomShape_M = decltype(size<0>(AtomShape_MNK{}))::value;
-    constexpr int kNWarps = decltype(size<0>(TileShape_MNK{}))::value / AtomShape_M;
-    constexpr int MMAStride_M = MMA_M * AtomShape_M;
-    auto t = make_tile(Layout<Shape<Int<AtomShape_M>, Int<kNWarps>>,
-                              Stride<_1, Int<MMAStride_M>> >{},
-                       make_layout(size<2>(TileShape_MNK{})));
-    // if (cute::thread0()) {printf("make_tiled_copy_A_warpcontiguousM "); print(t); printf("\n");  }
-    return make_tiled_copy_impl(copy_atom, tiled_mma.get_layoutA_TV(), t);
-}
+// template <int MMA_M,
+//           class... Args,
+//           class TiledMMA>
+// CUTE_HOST_DEVICE
+// auto
+// make_tiled_copy_A_warpcontiguousM(Copy_Atom<Args...> const& copy_atom,
+//                                  TiledMMA           const& tiled_mma) {
+//     using TileShape_MNK = typename TiledMMA::TiledShape_MNK;
+//     using AtomShape_MNK = typename TiledMMA::AtomShape_MNK;
+//     constexpr int AtomShape_M = decltype(size<0>(AtomShape_MNK{}))::value;
+//     constexpr int kNWarps = decltype(size<0>(TileShape_MNK{}))::value / AtomShape_M;
+//     constexpr int MMAStride_M = MMA_M * AtomShape_M;
+//     auto t = make_tile(Layout<Shape<Int<AtomShape_M>, Int<kNWarps>>,
+//                               Stride<_1, Int<MMAStride_M>> >{},
+//                        make_layout(size<2>(TileShape_MNK{})));
+//     // if (cute::thread0()) {printf("make_tiled_copy_A_warpcontiguousM "); print(t); printf("\n");  }
+//     return make_tiled_copy_impl(copy_atom, tiled_mma.get_layoutA_TV(), t);
+// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <int MMA_M,
-          class... Args,
-          class TiledMMA>
-CUTE_HOST_DEVICE
-auto
-make_tiled_copy_C_warpcontiguousM(Copy_Atom<Args...> const& copy_atom,
-                                 TiledMMA           const& tiled_mma) {
-    using TileShape_MNK = typename TiledMMA::TiledShape_MNK;
-    using AtomShape_MNK = typename TiledMMA::AtomShape_MNK;
-    constexpr int AtomShape_M = decltype(size<0>(AtomShape_MNK{}))::value;
-    constexpr int kNWarps = decltype(size<0>(TileShape_MNK{}))::value / AtomShape_M;
-    constexpr int MMAStride_M = MMA_M * AtomShape_M;
-    auto t = make_tile(Layout<Shape<Int<AtomShape_M>, Int<kNWarps>>,
-                              Stride<_1, Int<MMAStride_M>> >{},
-                       // TODO: Shouldn't this be size<1>?
-                       make_layout(size<2>(TileShape_MNK{})));
-    // if (cute::thread0()) {printf("make_tiled_copy_C_warpcontiguousM "); print(t); printf("\n");  }
-    return make_tiled_copy_impl(copy_atom, tiled_mma.get_layoutC_TV(), t);
-}
+// template <int MMA_M,
+//           class... Args,
+//           class TiledMMA>
+// CUTE_HOST_DEVICE
+// auto
+// make_tiled_copy_C_warpcontiguousM(Copy_Atom<Args...> const& copy_atom,
+//                                  TiledMMA           const& tiled_mma) {
+//     using TileShape_MNK = typename TiledMMA::TiledShape_MNK;
+//     using AtomShape_MNK = typename TiledMMA::AtomShape_MNK;
+//     constexpr int AtomShape_M = decltype(size<0>(AtomShape_MNK{}))::value;
+//     constexpr int kNWarps = decltype(size<0>(TileShape_MNK{}))::value / AtomShape_M;
+//     constexpr int MMAStride_M = MMA_M * AtomShape_M;
+//     auto t = make_tile(Layout<Shape<Int<AtomShape_M>, Int<kNWarps>>,
+//                               Stride<_1, Int<MMAStride_M>> >{},
+//                        // TODO: Shouldn't this be size<1>?
+//                        make_layout(size<2>(TileShape_MNK{})));
+//     // if (cute::thread0()) {printf("make_tiled_copy_C_warpcontiguousM "); print(t); printf("\n");  }
+//     return make_tiled_copy_impl(copy_atom, tiled_mma.get_layoutC_TV(), t);
+// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
