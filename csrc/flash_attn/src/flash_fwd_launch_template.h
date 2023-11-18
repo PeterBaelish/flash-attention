@@ -424,7 +424,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 // auto kernel = &flash_fwd_kernel<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, true, ReturnSoftmaxConst && Is_dropout>;*/
                 if(Is_causal) {
                     dim3 grid(num_m_block, 1, 1);
-                    auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
+                    //auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
                     int ctas_per_sm;
                     //if (smem_size >= 48 * 1024) {
                     //    C10_CUDA_CHECK(cudaFuncSetAttribute(
@@ -452,7 +452,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                             auto duration = now.time_since_epoch();
                             auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
                             printf("start time of kernel(%d, %d) is %llu\n", i, j, nanoseconds);
-                            kernel<<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*b+j)%7]>>>(params, i, j);
+                            flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout><<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*b+j)%7]>>>(params, i, j);
                         }
                     }
 
@@ -463,7 +463,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                 }
                 else {
                     dim3 grid(num_m_block, params.b, params.h);
-                    auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
+                    //auto kernel = &flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout>;
                     //if (smem_size >= 48 * 1024) {
                     //    C10_CUDA_CHECK(cudaFuncSetAttribute(
                     //        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_size));
@@ -472,7 +472,7 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     //cudaError status_ = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
                     //    &ctas_per_sm, kernel, Kernel_traits::kNThreads, smem_size);
                     printf("smem_size = %d, CTAs per SM = %d\n", int(smem_size), ctas_per_sm);
-                    kernel<<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params, 0, 0);
+                    flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout><<<grid, Kernel_traits::kNThreads, smem_size, stream>>>(params, 0, 0);
 					//cudaStreamSynchronize(stream);
                 }
                 //C10_CUDA_KERNEL_LAUNCH_CHECK();  
