@@ -189,7 +189,7 @@ if not SKIP_CUDA_BUILD:
                         "--use_fast_math",
                         "--ptxas-options=-v",
                         # "--ptxas-options=-O2",
-                        "-lineinfo",
+                        #"-lineinfo",
                         "-lcuda"
                     ]
                     + generator_flag
