@@ -320,13 +320,13 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
     // Forward kernel will populate memory with the seed and offset.
     //params.rng_state = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
 
-    if (p_dropout > 0.0)  {
+    /*if (p_dropout > 0.0)  {
         auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
             gen_, at::cuda::detail::getDefaultCUDAGenerator());
         // See Note [Acquire lock when using random generators]
         std::lock_guard<std::mutex> lock(gen->mutex_);
         params.philox_args = gen->philox_cuda_state(counter_offset);
-    }
+    }*/
 
     //auto stream = at::cuda::getCurrentCUDAStream().stream();
     cudaStream_t stream;
@@ -338,10 +338,10 @@ mha_fwd(const at::Tensor &q,         // batch_size x seqlen_q x num_heads x head
     //printf("d\n");
 
     at::Tensor out_padded = out;
-    /*if (head_size_og % 8 != 0) {
+    if (head_size_og % 8 != 0) {
         out = out.index({"...", torch::indexing::Slice(torch::indexing::None, head_size_og)});
         if (out_.has_value()) { out_.value().copy_(out); }
-    }*/
+    }
     //printf("e\n");
     return {out, q_padded, k_padded, v_padded, out_padded, softmax_lse, p, rng_state};
 }
