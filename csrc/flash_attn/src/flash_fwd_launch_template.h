@@ -438,12 +438,12 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
                     auto h = params.h;
 
                     cudaStream_t streams[7];
-                    uint64_t mask = 0x3full;
+                    uint64_t mask = 0x3fffffull;
 
                     for(int i = 0; i < 7; i++) {
                         cudaStreamCreate(&streams[i]);
-                        //libsmctrl_set_stream_mask(streams[i], ~mask);
-                        mask <<= 6;
+                        libsmctrl_set_stream_mask(streams[i], ~mask);
+                        mask = ~mask;
                     }
 
                     for (int i = 0; i < b; i++) {
