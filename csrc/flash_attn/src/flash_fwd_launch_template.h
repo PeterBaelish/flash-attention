@@ -448,10 +448,10 @@ void run_flash_fwd(Flash_fwd_params &params, cudaStream_t stream) {
 
                     for (int i = 0; i < b; i++) {
                         for (int j = 0; j < h; j++) {
-                            auto now = std::chrono::high_resolution_clock::now();
-                            auto duration = now.time_since_epoch();
-                            auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
-                            printf("start time of kernel(%d, %d) is %llu\n", i, j, nanoseconds);
+                            //auto now = std::chrono::high_resolution_clock::now();
+                            //auto duration = now.time_since_epoch();
+                            //auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+                            //printf("start time of kernel(%d, %d) is %llu\n", i, j, nanoseconds);
                             flash_fwd_kernel_casual<Kernel_traits, Is_dropout, Is_causal, IsEvenNConst, IsEvenKConst, ReturnSoftmaxConst && Is_dropout><<<grid, Kernel_traits::kNThreads, smem_size, streams[(i*h+j)%7]>>>(params, i, j);
                         }
                     }
