@@ -683,8 +683,8 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
 
     //if (cute::thread0()) { printf("fence -7\n"); }
     
-    uint64_t start_time = GlobalTimer64();
-    uint32_t sm_id = GetSMID();
+    //uint64_t start_time = GlobalTimer64();
+    //uint32_t sm_id = GetSMID();
 
 
     using Element = typename Kernel_traits::Element;
@@ -1223,7 +1223,7 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
         atomicOr(&CompleteMask[bidh][bidb][blockIdx.x], 1);
     
 
-    if (cute::thread0()) { printf("fence 1\n"); }
+    //if (cute::thread0()) { printf("fence 1\n"); }
     /*
     if (m_block == ((binfo.actual_seqlen_q + kBlockM - 1) / kBlockM) - 1 && tidx == 66) 
     { 
@@ -1867,11 +1867,13 @@ inline __device__ void compute_attn_1rowblock_causal(const Params &params, const
     //                 dummy += tanf(dummy) + logf(dummy);
     //         }
     // }
+    /*
     uint64_t end_time = GlobalTimer64();
     if(threadIdx.x == 0) {
         printf("block: (%d, %d, %d), sm_id=%u, start_time=%llu, end_time=%llu, exec_time=%llu\n", 
             blockIdx.x, bidb, bidh, sm_id, start_time, end_time, end_time-start_time);
     }
+    */
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
